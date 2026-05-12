@@ -33,6 +33,14 @@ type LedgerRepository interface {
 	EntriesForTransaction(ctx context.Context, txnID uuid.UUID) ([]domain.JournalEntry, error)
 }
 
+// SatelliteRepository reads and writes satellite NDVI observations (Step 7).
+type SatelliteRepository interface {
+	// Create persists a new observation (used for seeding mock data in tests and staging).
+	Create(ctx context.Context, obs *domain.SatelliteObservation, plotGeoJSON string) error
+	// LatestForPlot returns the most recent observation for a plot, or nil if none exists.
+	LatestForPlot(ctx context.Context, plotID uuid.UUID) (*domain.SatelliteObservation, error)
+}
+
 // ProofOfActionRepository persists GPS field-verification records (Step 6).
 type ProofOfActionRepository interface {
 	Create(ctx context.Context, proof *domain.ProofOfAction) error

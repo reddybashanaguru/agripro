@@ -18,8 +18,9 @@ const (
 	ErrCodeIdempotencyConflict ErrorCode = "IDEMPOTENCY_CONFLICT"
 	ErrCodeUnauthorized       ErrorCode = "UNAUTHORIZED"
 	ErrCodeForbidden          ErrorCode = "FORBIDDEN"
-	ErrCodeInternal           ErrorCode = "INTERNAL_ERROR"
+	ErrCodeInternal             ErrorCode = "INTERNAL_ERROR"
 	ErrCodeDoubleEntryViolation ErrorCode = "DOUBLE_ENTRY_VIOLATION"
+	ErrCodeNDVIBlocked          ErrorCode = "NDVI_BELOW_THRESHOLD"
 )
 
 // DomainError carries a code, a user-facing message, and an optional cause.
@@ -47,7 +48,7 @@ func (e *DomainError) HTTPStatus() int {
 		return http.StatusNotFound
 	case ErrCodeConflict, ErrCodeIdempotencyConflict:
 		return http.StatusConflict
-	case ErrCodeValidation, ErrCodeMathViolation, ErrCodeDoubleEntryViolation:
+	case ErrCodeValidation, ErrCodeMathViolation, ErrCodeDoubleEntryViolation, ErrCodeNDVIBlocked:
 		return http.StatusUnprocessableEntity
 	case ErrCodeInsufficientFunds:
 		return http.StatusPaymentRequired

@@ -90,12 +90,14 @@ func main() {
 	syncRepo := repository.NewPostgresSyncRepo(db)
 	ledgerRepo := repository.NewPostgresLedgerRepo(db)
 	proofRepo := repository.NewPostgresProofRepo(db)
+	satelliteRepo := repository.NewPostgresSatelliteRepo(db)
 
-	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, logger)
+	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, satelliteRepo, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
 	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
 	ledgerUC := usecase.NewLedgerUsecase(ledgerRepo, logger)
 	proofUC := usecase.NewProofOfActionUsecase(proofRepo, plotRepo, farmerRepo, logger)
+	satelliteUC := usecase.NewSatelliteUsecase(satelliteRepo, plotRepo, logger)
 
 	// Seed & load singleton system accounts (idempotent — safe to call every startup)
 	accounts, err := seedSystemAccounts(ctx, db, logger)
@@ -107,6 +109,7 @@ func main() {
 	syncHandler := handler.NewSyncHandler(syncUC)
 	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
 	proofHandler := handler.NewProofOfActionHandler(proofUC)
+	satelliteHandler := handler.NewSatelliteHandler(satelliteUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -148,6 +151,10 @@ func main() {
 	v1.GET("/land-plots/:id", landPlotHandler.GetByID)
 	v1.POST("/land-plots/:id/verify-gps", landPlotHandler.VerifyGPS)           // Step 6 preview (stateless)
 	v1.POST("/land-plots/:id/proof-of-action", proofHandler.Submit)             // Step 6 — audited GPS proof
+	v1.GET("/land-plots/:id/satellite", satelliteHandler.GetLatest)             // Step 7 — latest NDVI
+
+	// Satellite Sentinel (Step 7) — mock ingestion for staging/testing
+	v1.POST("/satellite/observations", satelliteHandler.Seed)
 
 	// ── Graceful shutdown ─────────────────────────────────────────
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

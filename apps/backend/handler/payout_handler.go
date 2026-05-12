@@ -38,6 +38,8 @@ type AccountConfig struct {
 
 type initiatePayoutRequest struct {
 	FarmerID    string `json:"farmer_id"    validate:"required,uuid"`
+	// PlotID is optional. When provided, triggers Step 7 Satellite Sentinel NDVI check.
+	PlotID      string `json:"plot_id"`
 	GrossAmount string `json:"gross_amount" validate:"required"`
 	Currency    string `json:"currency"     validate:"required,len=3"`
 	Description string `json:"description"`
@@ -79,9 +81,21 @@ func (h *PayoutHandler) InitiatePayout(c echo.Context) error {
 	actorID, _ := c.Get("user_id").(string)
 	initiatedBy, _ := uuid.Parse(actorID)
 
+	var plotIDPtr *uuid.UUID
+	if req.PlotID != "" {
+		pid, err := uuid.Parse(req.PlotID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnprocessableEntity, map[string]string{
+				"code": "INVALID_PLOT_ID", "message": "plot_id must be a valid UUID",
+			})
+		}
+		plotIDPtr = &pid
+	}
+
 	txn, err := h.payoutUC.ExecutePayout(c.Request().Context(), usecase.PayoutRequest{
 		IdempotencyKey:    idempotencyKey,
 		FarmerID:          farmerID,
+		PlotID:            plotIDPtr,
 		GrossAmount:       grossAmount,
 		Currency:          req.Currency,
 		Description:       req.Description,

@@ -25,7 +25,8 @@ type cachedResponse struct {
 
 // skipPaths exact paths that manage their own idempotency at the DB level.
 var skipPaths = map[string]bool{
-	"/api/v1/sync/push": true,
+	"/api/v1/sync/push":              true,
+	"/api/v1/satellite/observations": true,
 }
 
 // skipSuffixes path suffixes exempt from the X-Idempotency-Key requirement.

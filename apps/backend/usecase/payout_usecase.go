@@ -15,6 +15,9 @@ import (
 type PayoutRequest struct {
 	IdempotencyKey string
 	FarmerID       uuid.UUID
+	// PlotID triggers the Step 7 Satellite Sentinel NDVI check before payout.
+	// nil = no NDVI gate (e.g. non-crop payouts).
+	PlotID         *uuid.UUID
 	GrossAmount    decimal.Decimal
 	Currency       string
 	Description    string
@@ -27,17 +30,24 @@ type PayoutRequest struct {
 }
 
 type PayoutUsecase struct {
-	txnRepo    repository.TransactionRepository
-	farmerRepo repository.FarmerRepository
-	log        zerolog.Logger
+	txnRepo       repository.TransactionRepository
+	farmerRepo    repository.FarmerRepository
+	satelliteRepo repository.SatelliteRepository
+	log           zerolog.Logger
 }
 
 func NewPayoutUsecase(
 	txnRepo repository.TransactionRepository,
 	farmerRepo repository.FarmerRepository,
+	satelliteRepo repository.SatelliteRepository,
 	log zerolog.Logger,
 ) *PayoutUsecase {
-	return &PayoutUsecase{txnRepo: txnRepo, farmerRepo: farmerRepo, log: log}
+	return &PayoutUsecase{
+		txnRepo:       txnRepo,
+		farmerRepo:    farmerRepo,
+		satelliteRepo: satelliteRepo,
+		log:           log,
+	}
 }
 
 // ExecutePayout processes a farmer payout with full ledger integrity.
@@ -67,7 +77,26 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 		return nil, err
 	}
 
-	// 3. Compute 50/25/5/20 split
+	// 3. Satellite Sentinel — NDVI check (only when a plot is associated with this payout)
+	if req.PlotID != nil {
+		obs, err := u.satelliteRepo.LatestForPlot(ctx, *req.PlotID)
+		if err != nil {
+			return nil, err
+		}
+		if obs != nil {
+			if err := domain.CheckNDVI(obs); err != nil {
+				log.Warn().
+					Str("plot_id", req.PlotID.String()).
+					Str("ndvi_mean", obs.NDVIMean.String()).
+					Str("source", obs.Source).
+					Msg("payout blocked by Satellite Sentinel — NDVI below threshold")
+				return nil, err
+			}
+		}
+		// obs == nil → no satellite data yet → allow payout (no block on missing data)
+	}
+
+	// 4. Compute 50/25/5/20 split
 	grossMoney, err := domain.NewMoney(req.GrossAmount, req.Currency)
 	if err != nil {
 		return nil, err
@@ -77,7 +106,7 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 		return nil, err
 	}
 
-	// 4. Build transaction record
+	// 5. Build transaction record
 	txnID := uuid.New()
 	now := time.Now().UTC()
 	txn := &domain.Transaction{
@@ -97,7 +126,7 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 		return nil, err
 	}
 
-	// 5. Build double-entry journal (8 entries: 4 debits + 4 credits)
+	// 6. Build double-entry journal (8 entries: 4 debits + 4 credits)
 	entries := buildPayoutJournalEntries(txnID, split, req)
 
 	if err := u.txnRepo.CreateJournalEntries(ctx, entries); err != nil {
@@ -106,7 +135,7 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 		return nil, err
 	}
 
-	// 6. Mark completed
+	// 7. Mark completed
 	if err := u.txnRepo.UpdateStatus(ctx, txnID, domain.PayoutCompleted); err != nil {
 		return nil, err
 	}
