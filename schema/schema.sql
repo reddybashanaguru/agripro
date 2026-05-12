@@ -277,3 +277,28 @@ CREATE TABLE satellite_observations (
 CREATE INDEX idx_satellite_obs_geom ON satellite_observations USING GIST(geom);
 CREATE INDEX idx_satellite_obs_plot ON satellite_observations(plot_id);
 CREATE INDEX idx_satellite_obs_time ON satellite_observations(observed_at DESC);
+
+-- ─────────────────────────────────────────────────────────────
+-- PROOF OF ACTION (Step 6) — GPS field verification log
+-- ─────────────────────────────────────────────────────────────
+CREATE TYPE action_verdict AS ENUM ('VERIFIED', 'REJECTED', 'SPOOFED');
+
+CREATE TABLE IF NOT EXISTS proof_of_action (
+    id                     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plot_id                UUID NOT NULL REFERENCES land_plots(id),
+    farmer_id              UUID NOT NULL REFERENCES farmers(id),
+    longitude              DOUBLE PRECISION NOT NULL,
+    latitude               DOUBLE PRECISION NOT NULL,
+    accuracy_m             DOUBLE PRECISION NOT NULL,
+    photo_hash             VARCHAR(64) NOT NULL,
+    verdict                action_verdict NOT NULL,
+    distance_to_boundary_m DOUBLE PRECISION,
+    spoof_reason           TEXT,
+    submitted_at           TIMESTAMPTZ NOT NULL,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proof_photo_hash ON proof_of_action(photo_hash);
+CREATE INDEX IF NOT EXISTS idx_proof_plot    ON proof_of_action(plot_id);
+CREATE INDEX IF NOT EXISTS idx_proof_farmer  ON proof_of_action(farmer_id);
+CREATE INDEX IF NOT EXISTS idx_proof_verdict ON proof_of_action(verdict);

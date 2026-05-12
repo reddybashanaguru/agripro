@@ -89,11 +89,13 @@ func main() {
 	plotRepo := repository.NewPostgresLandPlotRepo(db)
 	syncRepo := repository.NewPostgresSyncRepo(db)
 	ledgerRepo := repository.NewPostgresLedgerRepo(db)
+	proofRepo := repository.NewPostgresProofRepo(db)
 
 	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
 	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
 	ledgerUC := usecase.NewLedgerUsecase(ledgerRepo, logger)
+	proofUC := usecase.NewProofOfActionUsecase(proofRepo, plotRepo, farmerRepo, logger)
 
 	// Seed & load singleton system accounts (idempotent — safe to call every startup)
 	accounts, err := seedSystemAccounts(ctx, db, logger)
@@ -104,6 +106,7 @@ func main() {
 	landPlotHandler := handler.NewLandPlotHandler(landPlotUC)
 	syncHandler := handler.NewSyncHandler(syncUC)
 	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
+	proofHandler := handler.NewProofOfActionHandler(proofUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -143,7 +146,8 @@ func main() {
 	v1.GET("/land-plots", landPlotHandler.ListByFarmer)        // ?farmer_id=
 	v1.GET("/land-plots/bbox", landPlotHandler.SearchBBox)     // ?min_lon=&min_lat=&max_lon=&max_lat=
 	v1.GET("/land-plots/:id", landPlotHandler.GetByID)
-	v1.POST("/land-plots/:id/verify-gps", landPlotHandler.VerifyGPS) // Step 6 preview
+	v1.POST("/land-plots/:id/verify-gps", landPlotHandler.VerifyGPS)           // Step 6 preview (stateless)
+	v1.POST("/land-plots/:id/proof-of-action", proofHandler.Submit)             // Step 6 — audited GPS proof
 
 	// ── Graceful shutdown ─────────────────────────────────────────
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

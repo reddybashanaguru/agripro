@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -22,10 +23,17 @@ type cachedResponse struct {
 	Body   json.RawMessage `json:"body"`
 }
 
-// skipPaths lists routes that manage their own idempotency at the DB level
-// and are not expected to send X-Idempotency-Key (e.g. WatermelonDB sync protocol).
+// skipPaths exact paths that manage their own idempotency at the DB level.
 var skipPaths = map[string]bool{
 	"/api/v1/sync/push": true,
+}
+
+// skipSuffixes path suffixes exempt from the X-Idempotency-Key requirement.
+// Used for routes with dynamic segments (e.g. /land-plots/:id/proof-of-action)
+// that enforce uniqueness via a domain-level key (photo_hash DB unique index).
+var skipSuffixes = []string{
+	"/proof-of-action",
+	"/verify-gps",
 }
 
 // IdempotencyMiddleware enforces idempotency on POST/PUT/PATCH endpoints.
@@ -42,9 +50,14 @@ func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			// Skip routes that own their own idempotency (e.g. sync push)
+			// Skip routes that own their own idempotency
 			if skipPaths[req.URL.Path] {
 				return next(c)
+			}
+			for _, suffix := range skipSuffixes {
+				if strings.HasSuffix(req.URL.Path, suffix) {
+					return next(c)
+				}
 			}
 
 			key := req.Header.Get(idempotencyKeyHeader)

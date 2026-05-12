@@ -33,6 +33,13 @@ type LedgerRepository interface {
 	EntriesForTransaction(ctx context.Context, txnID uuid.UUID) ([]domain.JournalEntry, error)
 }
 
+// ProofOfActionRepository persists GPS field-verification records (Step 6).
+type ProofOfActionRepository interface {
+	Create(ctx context.Context, proof *domain.ProofOfAction) error
+	// PhotoHashExists checks for replay attacks: same photo submitted twice.
+	PhotoHashExists(ctx context.Context, hash string) (bool, error)
+}
+
 // LandPlotRepository is the Dependency Inversion boundary for spatial data.
 // Usecases never import PostGIS or pgx — only this interface.
 type LandPlotRepository interface {
