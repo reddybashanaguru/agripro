@@ -15,6 +15,9 @@ type TransactionRepository interface {
 	Create(ctx context.Context, txn *domain.Transaction) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.PayoutStatus) error
 	CreateJournalEntries(ctx context.Context, entries []domain.JournalEntry) error
+	// ListTransactions returns a paginated slice of transactions ordered by created_at DESC
+	// along with the total count across all pages.
+	ListTransactions(ctx context.Context, limit, offset int) ([]domain.Transaction, int, error)
 }
 
 // FarmerRepository handles farmer persistence.
@@ -64,4 +67,11 @@ type LandPlotRepository interface {
 	DistanceToBoundary(ctx context.Context, plotID uuid.UUID, lon, lat float64) (float64, error)
 	// HasOverlap checks if a new polygon overlaps any existing plot owned by the same farmer.
 	HasOverlap(ctx context.Context, farmerID uuid.UUID, geoJSON string) (bool, error)
+}
+
+// MetricsRepository aggregates platform-wide KPIs for the Investor Command Center.
+// All counts are computed in a single SQL query to minimise round-trips.
+type MetricsRepository interface {
+	// GetPlatformMetrics returns aggregate counts and totals across the entire platform.
+	GetPlatformMetrics(ctx context.Context) (*domain.PlatformMetrics, error)
 }

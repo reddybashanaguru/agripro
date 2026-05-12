@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -34,6 +35,18 @@ type AccountConfig struct {
 	PlatformAccountID uuid.UUID
 	AgentAccountID    uuid.UUID
 	ReserveAccountID  uuid.UUID
+}
+
+type transactionResponse struct {
+	ID             string  `json:"id"`
+	IdempotencyKey string  `json:"idempotency_key"`
+	GrossAmount    string  `json:"gross_amount"`
+	Currency       string  `json:"currency"`
+	Status         string  `json:"status"`
+	FarmerID       string  `json:"farmer_id"`
+	Description    string  `json:"description"`
+	CreatedAt      string  `json:"created_at"`
+	CompletedAt    *string `json:"completed_at"`
 }
 
 type initiatePayoutRequest struct {
@@ -128,5 +141,63 @@ func (h *PayoutHandler) InitiatePayout(c echo.Context) error {
 		Currency:       txn.Currency,
 		IdempotencyKey: txn.IdempotencyKey,
 		CreatedAt:      txn.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	})
+}
+
+// GET /api/v1/transactions — paginated transaction list for the Investor Command Center.
+func (h *PayoutHandler) ListTransactions(c echo.Context) error {
+	const defaultLimit = 20
+	const maxLimit = 100
+
+	limit := defaultLimit
+	if v := c.QueryParam("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			return httpErr(http.StatusBadRequest, "INVALID_PARAM", "limit must be a positive integer")
+		}
+		if n > maxLimit {
+			n = maxLimit
+		}
+		limit = n
+	}
+
+	offset := 0
+	if v := c.QueryParam("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return httpErr(http.StatusBadRequest, "INVALID_PARAM", "offset must be a non-negative integer")
+		}
+		offset = n
+	}
+
+	txns, total, err := h.payoutUC.ListTransactions(c.Request().Context(), limit, offset)
+	if err != nil {
+		return domainHTTPErr(err)
+	}
+
+	resp := make([]transactionResponse, len(txns))
+	for i, t := range txns {
+		tr := transactionResponse{
+			ID:             t.ID.String(),
+			IdempotencyKey: t.IdempotencyKey,
+			GrossAmount:    t.GrossAmount.String(),
+			Currency:       t.Currency,
+			Status:         string(t.Status),
+			FarmerID:       t.FarmerID.String(),
+			Description:    t.Description,
+			CreatedAt:      t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if t.CompletedAt != nil {
+			s := t.CompletedAt.Format("2006-01-02T15:04:05Z07:00")
+			tr.CompletedAt = &s
+		}
+		resp[i] = tr
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"transactions": resp,
+		"total":        total,
+		"limit":        limit,
+		"offset":       offset,
 	})
 }

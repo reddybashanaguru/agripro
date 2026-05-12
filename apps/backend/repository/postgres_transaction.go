@@ -74,6 +74,47 @@ func (r *postgresTransactionRepo) UpdateStatus(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+// ListTransactions returns a page of transactions ordered by created_at DESC
+// along with the total count of all transactions in the table.
+func (r *postgresTransactionRepo) ListTransactions(ctx context.Context, limit, offset int) ([]domain.Transaction, int, error) {
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM transactions`).Scan(&total); err != nil {
+		return nil, 0, domain.ErrInternal(err)
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, idempotency_key, gross_amount::text, currency, status::text,
+		       farmer_id, COALESCE(description,''), created_at, completed_at
+		FROM transactions
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`, limit, offset)
+	if err != nil {
+		return nil, 0, domain.ErrInternal(err)
+	}
+	defer rows.Close()
+
+	var txns []domain.Transaction
+	for rows.Next() {
+		var t domain.Transaction
+		var grossStr, statusStr string
+		var completedAt *time.Time
+		if err := rows.Scan(
+			&t.ID, &t.IdempotencyKey, &grossStr, &t.Currency, &statusStr,
+			&t.FarmerID, &t.Description, &t.CreatedAt, &completedAt,
+		); err != nil {
+			return nil, 0, domain.ErrInternal(err)
+		}
+		t.GrossAmount, _ = decimal.NewFromString(grossStr)
+		t.Status = domain.PayoutStatus(statusStr)
+		t.CompletedAt = completedAt
+		txns = append(txns, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domain.ErrInternal(err)
+	}
+	return txns, total, nil
+}
+
 func (r *postgresTransactionRepo) CreateJournalEntries(ctx context.Context, entries []domain.JournalEntry) error {
 	if err := domain.ValidateJournalBalance(entries); err != nil {
 		return err

@@ -91,6 +91,7 @@ func main() {
 	ledgerRepo := repository.NewPostgresLedgerRepo(db)
 	proofRepo := repository.NewPostgresProofRepo(db)
 	satelliteRepo := repository.NewPostgresSatelliteRepo(db)
+	metricsRepo := repository.NewPostgresMetricsRepo(db)
 
 	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, satelliteRepo, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
@@ -98,6 +99,7 @@ func main() {
 	ledgerUC := usecase.NewLedgerUsecase(ledgerRepo, logger)
 	proofUC := usecase.NewProofOfActionUsecase(proofRepo, plotRepo, farmerRepo, logger)
 	satelliteUC := usecase.NewSatelliteUsecase(satelliteRepo, plotRepo, logger)
+	metricsUC := usecase.NewMetricsUsecase(metricsRepo, logger)
 
 	// Seed & load singleton system accounts (idempotent — safe to call every startup)
 	accounts, err := seedSystemAccounts(ctx, db, logger)
@@ -110,6 +112,7 @@ func main() {
 	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
 	proofHandler := handler.NewProofOfActionHandler(proofUC)
 	satelliteHandler := handler.NewSatelliteHandler(satelliteUC)
+	metricsHandler := handler.NewMetricsHandler(metricsUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -139,6 +142,10 @@ func main() {
 
 	// Ledger Audit (Step 5)
 	v1.GET("/ledger/balance", ledgerHandler.GlobalBalance)
+
+	// Investor Command Center (Step 8)
+	v1.GET("/transactions", payoutHandler.ListTransactions)
+	v1.GET("/metrics-platform", metricsHandler.Get)
 
 	// Delta-Sync (Step 3) — WatermelonDB compatible
 	v1.GET("/sync/pull", syncHandler.Pull)

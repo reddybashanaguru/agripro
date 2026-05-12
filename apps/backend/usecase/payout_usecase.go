@@ -152,6 +152,16 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 	return txn, nil
 }
 
+// ListTransactions returns a paginated list of transactions ordered by created_at DESC.
+// limit is capped at 100 by the handler before calling this method.
+func (u *PayoutUsecase) ListTransactions(ctx context.Context, limit, offset int) ([]domain.Transaction, int, error) {
+	txns, total, err := u.txnRepo.ListTransactions(ctx, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return txns, total, nil
+}
+
 // buildPayoutJournalEntries constructs 8 balanced journal entries for a payout.
 // Debit source (escrow/revenue) and Credit each beneficiary bucket.
 func buildPayoutJournalEntries(txnID uuid.UUID, split domain.PayoutSplit, req PayoutRequest) []domain.JournalEntry {
