@@ -88,10 +88,12 @@ func main() {
 	farmerRepo := repository.NewPostgresFarmerRepo(db)
 	plotRepo := repository.NewPostgresLandPlotRepo(db)
 	syncRepo := repository.NewPostgresSyncRepo(db)
+	ledgerRepo := repository.NewPostgresLedgerRepo(db)
 
 	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
 	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
+	ledgerUC := usecase.NewLedgerUsecase(ledgerRepo, logger)
 
 	// Seed & load singleton system accounts (idempotent — safe to call every startup)
 	accounts, err := seedSystemAccounts(ctx, db, logger)
@@ -101,6 +103,7 @@ func main() {
 	payoutHandler := handler.NewPayoutHandler(payoutUC, accounts)
 	landPlotHandler := handler.NewLandPlotHandler(landPlotUC)
 	syncHandler := handler.NewSyncHandler(syncUC)
+	ledgerHandler := handler.NewLedgerHandler(ledgerUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -126,6 +129,10 @@ func main() {
 
 	v1 := e.Group("/api/v1")
 	v1.POST("/payouts", payoutHandler.InitiatePayout)
+	v1.GET("/payouts/:id/entries", ledgerHandler.EntriesForTransaction) // Step 5
+
+	// Ledger Audit (Step 5)
+	v1.GET("/ledger/balance", ledgerHandler.GlobalBalance)
 
 	// Delta-Sync (Step 3) — WatermelonDB compatible
 	v1.GET("/sync/pull", syncHandler.Pull)

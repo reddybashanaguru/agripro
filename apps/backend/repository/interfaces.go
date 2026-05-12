@@ -25,6 +25,14 @@ type FarmerRepository interface {
 	Update(ctx context.Context, farmer *domain.Farmer) error
 }
 
+// LedgerRepository reads aggregated journal data for audit and balance checks.
+type LedgerRepository interface {
+	// GlobalBalance returns the sum of all DEBIT and CREDIT entries in the ledger.
+	GlobalBalance(ctx context.Context) (*domain.LedgerBalance, error)
+	// EntriesForTransaction returns all journal entries for a specific transaction.
+	EntriesForTransaction(ctx context.Context, txnID uuid.UUID) ([]domain.JournalEntry, error)
+}
+
 // LandPlotRepository is the Dependency Inversion boundary for spatial data.
 // Usecases never import PostGIS or pgx — only this interface.
 type LandPlotRepository interface {

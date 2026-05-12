@@ -159,6 +159,16 @@ const (
 	PayoutReversed   PayoutStatus = "REVERSED"
 )
 
+// LedgerBalance is the global audit view of the entire ledger.
+// IsBalanced must be true for the ledger to be in a valid double-entry state.
+type LedgerBalance struct {
+	TotalDebit    decimal.Decimal `json:"total_debit"`
+	TotalCredit   decimal.Decimal `json:"total_credit"`
+	IsBalanced    bool            `json:"is_balanced"`
+	EntryCount    int             `json:"entry_count"`
+	TxnCount      int             `json:"transaction_count"`
+}
+
 // ValidateJournalBalance enforces double-entry integrity on a set of entries.
 func ValidateJournalBalance(entries []JournalEntry) error {
 	debitSum := decimal.Zero
