@@ -8,6 +8,7 @@ import {
   Scale,
   ArrowRightLeft,
   Satellite,
+  Radio,
   Leaf,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ const navItems = [
   { href: "/ledger",       label: "Ledger",       icon: Scale },
   { href: "/transactions", label: "Transactions", icon: ArrowRightLeft },
   { href: "/sentinel",     label: "Sentinel",     icon: Satellite },
+  { href: "/activity",     label: "Activity",     icon: Radio },
 ] as const;
 
 export function Navigation() {

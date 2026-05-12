@@ -71,11 +71,22 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8222/healthz || exit 0"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       TEST_DB_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
       TEST_API_URL: http://localhost:8888
       DATABASE_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
       REDIS_URL: redis://localhost:6379
+      NATS_URL: nats://localhost:4222
 
     steps:
       - uses: actions/checkout@v4

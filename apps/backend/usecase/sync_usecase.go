@@ -9,12 +9,13 @@ import (
 )
 
 type SyncUsecase struct {
-	syncRepo repository.SyncRepository
-	log      zerolog.Logger
+	syncRepo  repository.SyncRepository
+	publisher EventPublisher
+	log       zerolog.Logger
 }
 
-func NewSyncUsecase(syncRepo repository.SyncRepository, log zerolog.Logger) *SyncUsecase {
-	return &SyncUsecase{syncRepo: syncRepo, log: log}
+func NewSyncUsecase(syncRepo repository.SyncRepository, publisher EventPublisher, log zerolog.Logger) *SyncUsecase {
+	return &SyncUsecase{syncRepo: syncRepo, publisher: publisher, log: log}
 }
 
 // Pull returns all changes since the given timestamp and captures the server
@@ -57,6 +58,17 @@ func (u *SyncUsecase) Push(ctx context.Context, req *domain.PushRequest) (*domai
 		Int("plots_created", stats.PlotsCreated).
 		Int("conflicts_server_wins", stats.ConflictsResolved).
 		Msg("sync push committed")
+
+	// Publish sync event when any new records were pushed
+	if stats.FarmersCreated+stats.PlotsCreated > 0 {
+		if evt, err := domain.NewEvent(domain.EventSyncBatch, domain.SyncBatchData{
+			FarmersCreated: stats.FarmersCreated,
+			PlotsCreated:   stats.PlotsCreated,
+			TotalRecords:   stats.FarmersCreated + stats.PlotsCreated,
+		}); err == nil {
+			_ = u.publisher.Publish(ctx, domain.SubjectSyncBatch, evt)
+		}
+	}
 
 	return resp, stats, nil
 }

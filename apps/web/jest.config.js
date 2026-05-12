@@ -21,6 +21,8 @@ const config = {
     "lib/types.ts",
     "!**/*.d.ts",
     "!**/node_modules/**",
+    // EventFeed uses EventSource + browser lifecycle hooks — covered by Playwright E2E
+    "!components/EventFeed.tsx",
   ],
   coverageThreshold: {
     global: {

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	natsio "github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -83,6 +84,31 @@ func main() {
 	}
 	logger.Info().Msg("redis connected")
 
+	// ── NATS Event Bus (non-fatal — platform works without it) ────
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = natsio.DefaultURL // nats://127.0.0.1:4222
+	}
+	var nc *natsio.Conn
+	if natConn, natErr := natsio.Connect(natsURL,
+		natsio.Name("finagra-unity"),
+		natsio.MaxReconnects(5),
+		natsio.ReconnectWait(2*time.Second),
+	); natErr != nil {
+		logger.Warn().Err(natErr).Str("nats_url", natsURL).Msg("NATS unavailable — event streaming disabled")
+	} else {
+		nc = natConn
+		defer nc.Drain()
+		logger.Info().Str("nats_url", natsURL).Msg("NATS connected")
+	}
+
+	var publisher usecase.EventPublisher
+	if nc != nil {
+		publisher = usecase.NewNATSPublisher(nc)
+	} else {
+		publisher = usecase.NewNoopPublisher()
+	}
+
 	// ── Dependency wiring ─────────────────────────────────────────
 	txnRepo := repository.NewPostgresTransactionRepo(db)
 	farmerRepo := repository.NewPostgresFarmerRepo(db)
@@ -93,12 +119,12 @@ func main() {
 	satelliteRepo := repository.NewPostgresSatelliteRepo(db)
 	metricsRepo := repository.NewPostgresMetricsRepo(db)
 
-	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, satelliteRepo, logger)
+	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, satelliteRepo, publisher, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
-	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
+	syncUC := usecase.NewSyncUsecase(syncRepo, publisher, logger)
 	ledgerUC := usecase.NewLedgerUsecase(ledgerRepo, logger)
-	proofUC := usecase.NewProofOfActionUsecase(proofRepo, plotRepo, farmerRepo, logger)
-	satelliteUC := usecase.NewSatelliteUsecase(satelliteRepo, plotRepo, logger)
+	proofUC := usecase.NewProofOfActionUsecase(proofRepo, plotRepo, farmerRepo, publisher, logger)
+	satelliteUC := usecase.NewSatelliteUsecase(satelliteRepo, plotRepo, publisher, logger)
 	metricsUC := usecase.NewMetricsUsecase(metricsRepo, logger)
 
 	// Seed & load singleton system accounts (idempotent — safe to call every startup)
@@ -114,6 +140,7 @@ func main() {
 	satelliteHandler := handler.NewSatelliteHandler(satelliteUC)
 	metricsHandler := handler.NewMetricsHandler(metricsUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
+	eventsHandler := handler.NewEventsHandler(nc)
 
 	// ── Echo server ───────────────────────────────────────────────
 	e := echo.New()
@@ -146,6 +173,9 @@ func main() {
 	// Investor Command Center (Step 8)
 	v1.GET("/transactions", payoutHandler.ListTransactions)
 	v1.GET("/metrics-platform", metricsHandler.Get)
+
+	// Real-time Event Stream (Step 11) — SSE, backed by NATS
+	v1.GET("/events/stream", eventsHandler.Stream)
 
 	// Delta-Sync (Step 3) — WatermelonDB compatible
 	v1.GET("/sync/pull", syncHandler.Pull)

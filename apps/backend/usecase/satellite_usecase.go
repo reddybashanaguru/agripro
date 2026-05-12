@@ -26,17 +26,20 @@ type SeedObservationRequest struct {
 type SatelliteUsecase struct {
 	satelliteRepo repository.SatelliteRepository
 	plotRepo      repository.LandPlotRepository
+	publisher     EventPublisher
 	log           zerolog.Logger
 }
 
 func NewSatelliteUsecase(
 	satelliteRepo repository.SatelliteRepository,
 	plotRepo repository.LandPlotRepository,
+	publisher EventPublisher,
 	log zerolog.Logger,
 ) *SatelliteUsecase {
 	return &SatelliteUsecase{
 		satelliteRepo: satelliteRepo,
 		plotRepo:      plotRepo,
+		publisher:     publisher,
 		log:           log,
 	}
 }
@@ -83,6 +86,19 @@ func (u *SatelliteUsecase) SeedObservation(ctx context.Context, req SeedObservat
 		Str("source", req.Source).
 		Str("ndvi_mean", req.NDVIMean.String()).
 		Msg("satellite observation seeded")
+
+	// Publish NDVI alert when observation is below the payout-block threshold
+	ndviThreshold := decimal.NewFromFloat(0.30)
+	if req.NDVIMean.LessThan(ndviThreshold) {
+		if evt, err := domain.NewEvent(domain.EventNDVIAlert, domain.NDVIAlertData{
+			PlotID:    req.PlotID.String(),
+			NDVIMean:  req.NDVIMean.String(),
+			Source:    req.Source,
+			Threshold: ndviThreshold.String(),
+		}); err == nil {
+			_ = u.publisher.Publish(ctx, domain.SubjectNDVIAlert, evt)
+		}
+	}
 
 	return obs, nil
 }

@@ -33,6 +33,7 @@ type PayoutUsecase struct {
 	txnRepo       repository.TransactionRepository
 	farmerRepo    repository.FarmerRepository
 	satelliteRepo repository.SatelliteRepository
+	publisher     EventPublisher
 	log           zerolog.Logger
 }
 
@@ -40,12 +41,14 @@ func NewPayoutUsecase(
 	txnRepo repository.TransactionRepository,
 	farmerRepo repository.FarmerRepository,
 	satelliteRepo repository.SatelliteRepository,
+	publisher EventPublisher,
 	log zerolog.Logger,
 ) *PayoutUsecase {
 	return &PayoutUsecase{
 		txnRepo:       txnRepo,
 		farmerRepo:    farmerRepo,
 		satelliteRepo: satelliteRepo,
+		publisher:     publisher,
 		log:           log,
 	}
 }
@@ -148,6 +151,17 @@ func (u *PayoutUsecase) ExecutePayout(ctx context.Context, req PayoutRequest) (*
 		Str("gross", req.GrossAmount.String()).
 		Str("farmer_gets", split.Farmer.Amount.String()).
 		Msg("payout completed")
+
+	// Publish domain event (fire-and-forget — never block the payout on streaming)
+	if evt, err := domain.NewEvent(domain.EventPayoutCompleted, domain.PayoutCompletedData{
+		TxnID:       txnID.String(),
+		FarmerID:    req.FarmerID.String(),
+		GrossAmount: req.GrossAmount.String(),
+		FarmerGets:  split.Farmer.Amount.String(),
+		Currency:    req.Currency,
+	}); err == nil {
+		_ = u.publisher.Publish(ctx, domain.SubjectPayoutCompleted, evt)
+	}
 
 	return txn, nil
 }

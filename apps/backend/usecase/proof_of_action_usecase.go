@@ -23,6 +23,7 @@ type ProofOfActionUsecase struct {
 	proofRepo  repository.ProofOfActionRepository
 	plotRepo   repository.LandPlotRepository
 	farmerRepo repository.FarmerRepository
+	publisher  EventPublisher
 	log        zerolog.Logger
 }
 
@@ -30,12 +31,14 @@ func NewProofOfActionUsecase(
 	proofRepo repository.ProofOfActionRepository,
 	plotRepo repository.LandPlotRepository,
 	farmerRepo repository.FarmerRepository,
+	publisher EventPublisher,
 	log zerolog.Logger,
 ) *ProofOfActionUsecase {
 	return &ProofOfActionUsecase{
 		proofRepo:  proofRepo,
 		plotRepo:   plotRepo,
 		farmerRepo: farmerRepo,
+		publisher:  publisher,
 		log:        log,
 	}
 }
@@ -139,6 +142,18 @@ func (u *ProofOfActionUsecase) SubmitProof(ctx context.Context, req SubmitProofR
 		Str("verdict", string(verdict)).
 		Float64("accuracy_m", req.AccuracyM).
 		Msg("proof-of-action recorded")
+
+	// Publish proof verdict event (fire-and-forget)
+	if evt, err := domain.NewEvent(domain.EventProofVerdict, domain.ProofVerdictData{
+		ProofID:     proof.ID.String(),
+		PlotID:      req.PlotID.String(),
+		FarmerID:    req.FarmerID.String(),
+		Verdict:     string(verdict),
+		AccuracyM:   req.AccuracyM,
+		SpoofReason: spoofReason,
+	}); err == nil {
+		_ = u.publisher.Publish(ctx, domain.SubjectProofVerdict, evt)
+	}
 
 	return proof, nil
 }
