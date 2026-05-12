@@ -83,9 +83,14 @@ func main() {
 	// ── Dependency wiring ─────────────────────────────────────────
 	txnRepo := repository.NewPostgresTransactionRepo(db)
 	farmerRepo := repository.NewPostgresFarmerRepo(db)
+	plotRepo := repository.NewPostgresLandPlotRepo(db)
+
 	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, logger)
+	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
+
 	accounts := handler.AccountConfig{} // populated from DB seed at startup
 	payoutHandler := handler.NewPayoutHandler(payoutUC, accounts)
+	landPlotHandler := handler.NewLandPlotHandler(landPlotUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -111,6 +116,13 @@ func main() {
 
 	v1 := e.Group("/api/v1")
 	v1.POST("/payouts", payoutHandler.InitiatePayout)
+
+	// Land Registry (Step 2)
+	v1.POST("/land-plots", landPlotHandler.Create)
+	v1.GET("/land-plots", landPlotHandler.ListByFarmer)        // ?farmer_id=
+	v1.GET("/land-plots/bbox", landPlotHandler.SearchBBox)     // ?min_lon=&min_lat=&max_lon=&max_lat=
+	v1.GET("/land-plots/:id", landPlotHandler.GetByID)
+	v1.POST("/land-plots/:id/verify-gps", landPlotHandler.VerifyGPS) // Step 6 preview
 
 	// ── Graceful shutdown ─────────────────────────────────────────
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

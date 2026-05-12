@@ -24,3 +24,21 @@ type FarmerRepository interface {
 	Create(ctx context.Context, farmer *domain.Farmer) error
 	Update(ctx context.Context, farmer *domain.Farmer) error
 }
+
+// LandPlotRepository is the Dependency Inversion boundary for spatial data.
+// Usecases never import PostGIS or pgx — only this interface.
+type LandPlotRepository interface {
+	Create(ctx context.Context, plot *domain.LandPlot) error
+	FindByID(ctx context.Context, id uuid.UUID) (*domain.LandPlot, error)
+	FindByFarmerID(ctx context.Context, farmerID uuid.UUID) ([]*domain.LandPlot, error)
+	// FindInBBox returns plots whose geometry intersects the given WGS84 bounding box.
+	// Uses GIST index for O(log N) performance.
+	FindInBBox(ctx context.Context, minLon, minLat, maxLon, maxLat float64) ([]*domain.LandPlot, error)
+	// ContainsPoint checks if a GPS coordinate falls inside a specific plot boundary.
+	// Foundation for Step 6 Proof-of-Action GPS verification.
+	ContainsPoint(ctx context.Context, plotID uuid.UUID, lon, lat float64) (bool, error)
+	// DistanceToBoundary returns metres from a point to the nearest plot boundary edge.
+	DistanceToBoundary(ctx context.Context, plotID uuid.UUID, lon, lat float64) (float64, error)
+	// HasOverlap checks if a new polygon overlaps any existing plot owned by the same farmer.
+	HasOverlap(ctx context.Context, farmerID uuid.UUID, geoJSON string) (bool, error)
+}
