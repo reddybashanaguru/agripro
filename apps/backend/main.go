@@ -84,13 +84,16 @@ func main() {
 	txnRepo := repository.NewPostgresTransactionRepo(db)
 	farmerRepo := repository.NewPostgresFarmerRepo(db)
 	plotRepo := repository.NewPostgresLandPlotRepo(db)
+	syncRepo := repository.NewPostgresSyncRepo(db)
 
 	payoutUC := usecase.NewPayoutUsecase(txnRepo, farmerRepo, logger)
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
+	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
 
 	accounts := handler.AccountConfig{} // populated from DB seed at startup
 	payoutHandler := handler.NewPayoutHandler(payoutUC, accounts)
 	landPlotHandler := handler.NewLandPlotHandler(landPlotUC)
+	syncHandler := handler.NewSyncHandler(syncUC)
 	healthHandler := handler.NewHealthHandler(db, rdb)
 
 	// ── Echo server ───────────────────────────────────────────────
@@ -116,6 +119,10 @@ func main() {
 
 	v1 := e.Group("/api/v1")
 	v1.POST("/payouts", payoutHandler.InitiatePayout)
+
+	// Delta-Sync (Step 3) — WatermelonDB compatible
+	v1.GET("/sync/pull", syncHandler.Pull)
+	v1.POST("/sync/push", syncHandler.Push)
 
 	// Land Registry (Step 2)
 	v1.POST("/land-plots", landPlotHandler.Create)
