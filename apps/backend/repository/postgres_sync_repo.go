@@ -183,23 +183,40 @@ func (r *postgresSyncRepo) Push(ctx context.Context, req *domain.PushRequest) (*
 	// ── Farmers ──────────────────────────────────────────────────
 	for _, f := range req.Changes.Farmers.Created {
 		localID, _ := f["id"].(string)
-		serverID := uuid.New()
+		candidateID := uuid.New()
 		clientUpdatedAt := msToTime(f["updated_at"])
+		phone := strVal(f, "phone")
 
-		_, err := tx.Exec(ctx, `
+		// COALESCE ensures empty kyc_status defaults to PENDING (DB enum safety).
+		// ON CONFLICT returns 0 rows affected when phone already exists — in that case
+		// look up the existing farmer UUID so the land-plot FK stays valid.
+		tag, err := tx.Exec(ctx, `
 			INSERT INTO farmers (id, phone, name, kyc_status, fpo_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, NULLIF($5,'')::uuid, $6, $7)
+			VALUES ($1, $2, $3,
+			  COALESCE(NULLIF($4,''), 'PENDING')::kyc_status,
+			  NULLIF($5,'')::uuid, $6, $7)
 			ON CONFLICT (phone) DO NOTHING`,
-			serverID,
-			strVal(f, "phone"), strVal(f, "name"),
+			candidateID,
+			phone, strVal(f, "name"),
 			strVal(f, "kyc_status"), strVal(f, "fpo_id"),
 			clientUpdatedAt, clientUpdatedAt,
 		)
 		if err != nil {
 			return nil, nil, domain.ErrInternal(fmt.Errorf("push farmer create: %w", err))
 		}
-		resp.ServerIDs["farmers"][localID] = serverID.String()
-		stats.FarmersCreated++
+
+		var actualID uuid.UUID
+		if tag.RowsAffected() == 0 {
+			// Farmer already exists — resolve their real server UUID so the
+			// land-plot FK doesn't point to a nonexistent candidate row.
+			if err := tx.QueryRow(ctx, `SELECT id FROM farmers WHERE phone=$1`, phone).Scan(&actualID); err != nil {
+				return nil, nil, domain.ErrInternal(fmt.Errorf("resolve existing farmer: %w", err))
+			}
+		} else {
+			actualID = candidateID
+			stats.FarmersCreated++
+		}
+		resp.ServerIDs["farmers"][localID] = actualID.String()
 	}
 
 	for _, f := range req.Changes.Farmers.Updated {

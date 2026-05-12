@@ -40,6 +40,7 @@ func apiBase() string {
 }
 
 // pushPayload builds the WatermelonDB-shaped push body with one farmer + one land plot.
+// Field names match the WatermelonDB schema columns exactly (see watermelon/schema.js).
 // Local IDs use a "local-<uuid>" prefix — they have no server_id yet.
 func pushPayload(localFarmerID, localPlotID string, nowMs int64) map[string]any {
 	return map[string]any{
@@ -48,14 +49,13 @@ func pushPayload(localFarmerID, localPlotID string, nowMs int64) map[string]any 
 			"farmers": map[string]any{
 				"created": []map[string]any{
 					{
-						"id":          localFarmerID,
-						"name":        "Raju Test Farmer",
-						"phone":       fmt.Sprintf("+91900%08d", nowMs%100_000_000),
-						"village":     "Test Village",
-						"state":       "Telangana",
-						"is_verified": false,
-						"created_at":  nowMs - 5000,
-						"updated_at":  nowMs - 5000,
+						"id":         localFarmerID,
+						"name":       "Raju Test Farmer",
+						"phone":      fmt.Sprintf("+91900%08d", nowMs%100_000_000),
+						"kyc_status": "PENDING",
+						"fpo_id":     "",
+						"created_at": nowMs - 5000,
+						"updated_at": nowMs - 5000,
 					},
 				},
 				"updated": []map[string]any{},
@@ -66,9 +66,13 @@ func pushPayload(localFarmerID, localPlotID string, nowMs int64) map[string]any 
 					{
 						"id":        localPlotID,
 						"farmer_id": localFarmerID,
-						"name":      "Test Plot Alpha",
+						"plot_name": "Test Plot Alpha",
 						"state":     "Telangana",
-						"geojson": `{"type":"Polygon","coordinates":[[[78.4,17.4],[78.5,17.4],[78.5,17.5],[78.4,17.5],[78.4,17.4]]]}`,
+						"district":  "Hyderabad",
+						// geom_json: WatermelonDB column name from schema.js
+						// Polygon is ~100m×100m near Hyderabad — fits within NUMERIC(12,4) area_sqm limit.
+						// 0.1°×0.1° (~117km²) overflows; 0.001°×0.001° (~11,766m²) is safe.
+						"geom_json": `{"type":"Polygon","coordinates":[[[78.400,17.400],[78.401,17.400],[78.401,17.401],[78.400,17.401],[78.400,17.400]]]}`,
 						"created_at": nowMs - 4000,
 						"updated_at": nowMs - 4000,
 					},

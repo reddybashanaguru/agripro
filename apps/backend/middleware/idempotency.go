@@ -21,9 +21,16 @@ type cachedResponse struct {
 	Body   json.RawMessage `json:"body"`
 }
 
+// skipPaths lists routes that manage their own idempotency at the DB level
+// and are not expected to send X-Idempotency-Key (e.g. WatermelonDB sync protocol).
+var skipPaths = map[string]bool{
+	"/api/v1/sync/push": true,
+}
+
 // IdempotencyMiddleware enforces idempotency on POST/PUT/PATCH endpoints.
 // On first call: processes normally and caches response in Redis.
 // On replay: returns the cached response immediately, skipping all handlers.
+// Routes in skipPaths bypass this middleware (they own their idempotency guarantee).
 func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -31,6 +38,11 @@ func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 
 			// Only apply to mutating methods
 			if req.Method != http.MethodPost && req.Method != http.MethodPut && req.Method != http.MethodPatch {
+				return next(c)
+			}
+
+			// Skip routes that own their own idempotency (e.g. sync push)
+			if skipPaths[req.URL.Path] {
 				return next(c)
 			}
 
