@@ -1,0 +1,24 @@
+{
+  "name": "finagra-unity",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:regression": "cd tests/regression && go test -v -run TestMathLockdown ./...",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:migrate": "cd apps/backend && go run cmd/migrate/main.go up",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3"
+  },
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

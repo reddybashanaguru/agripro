@@ -1,0 +1,30 @@
+{
+  "projectName": "Finagra Unity",
+  "version": "0.1.0",
+  "pinnedFiles": [
+    "CLAUDE.md",
+    "schema/schema.sql",
+    "apps/backend/go.mod",
+    "apps/backend/domain/errors.go",
+    "apps/backend/domain/ledger.go",
+    "tests/regression/math_lockdown_test.go"
+  ],
+  "agents": {
+    "LogicAuditor": ".claude/agents/LogicAuditor.md",
+    "GISMaster": ".claude/agents/GISMaster.md",
+    "QASentinel": ".claude/agents/QASentinel.md"
+  },
+  "mathLaws": {
+    "FARMER_PAYMENT": 0.50,
+    "PLATFORM_FEE": 0.25,
+    "AGENT_COMMISSION": 0.05,
+    "RESERVE_FUND": 0.20
+  },
+  "conventions": {
+    "money": "shopspring/decimal — never float64",
+    "ids": "UUID v7 (time-ordered) for all primary keys",
+    "timestamps": "timestamptz — always UTC",
+    "softDelete": "deleted_at timestamptz nullable",
+    "idempotency": "X-Idempotency-Key header required on all write endpoints"
+  }
+}

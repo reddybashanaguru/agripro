@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Turbo
+.turbo/
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Go
+apps/backend/tmp/
+*.test
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+infra/docker/volumes/
+
+# Test coverage
+coverage/
+*.out
+
+# Compiled binaries
+apps/backend/bin/

@@ -1,0 +1,157 @@
+version: "3.9"
+
+# Finagra Unity — Local Development Infrastructure
+# 2026 AI-Native Observability Stack:
+#   PostGIS 17 + Redis 7 + NATS JetStream
+#   + OpenTelemetry Collector + Prometheus + Tempo + Grafana
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # DATA LAYER
+  # ─────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgis/postgis:17-3.4-alpine
+    container_name: finagra-postgres
+    environment:
+      POSTGRES_DB: finagra_dev
+      POSTGRES_USER: finagra
+      POSTGRES_PASSWORD: finagra_dev_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../schema/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finagra -d finagra_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    command: >
+      postgres
+        -c shared_preload_libraries=pg_stat_statements
+        -c pg_stat_statements.track=all
+        -c max_connections=200
+        -c shared_buffers=256MB
+        -c work_mem=16MB
+
+  redis:
+    image: redis:7-alpine
+    container_name: finagra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: finagra-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: -js -m 8222 --store_dir /data
+    volumes:
+      - nats_data:/data
+
+  # ─────────────────────────────────────────────────────────────
+  # AI-NATIVE OBSERVABILITY STACK (2026 pattern)
+  # ─────────────────────────────────────────────────────────────
+
+  # OpenTelemetry Collector — receives traces/metrics, fans out to Tempo + Prometheus
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: finagra-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC (backend sends traces here)
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics scrape endpoint
+    depends_on:
+      - tempo
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Grafana Tempo — distributed trace backend
+  tempo:
+    image: grafana/tempo:2.7.0
+    container_name: finagra-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "9095:9095"   # Tempo gRPC
+
+  # Prometheus — metrics scraper
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: finagra-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  # Grafana — unified dashboard (traces + metrics + logs)
+  grafana:
+    image: grafana/grafana:11.5.0
+    container_name: finagra-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: finagra_grafana
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"    # 3000 is used by Next.js dev
+    depends_on:
+      - prometheus
+      - tempo
+
+  # DB admin panel
+  adminer:
+    image: adminer:4
+    container_name: finagra-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: finagra-network

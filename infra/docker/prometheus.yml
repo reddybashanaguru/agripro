@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: finagra-local
+
+scrape_configs:
+  - job_name: finagra-backend
+    static_configs:
+      - targets: ["otel-collector:8889"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "finagra-backend"
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres:5432"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
