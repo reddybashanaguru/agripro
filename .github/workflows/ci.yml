@@ -1,0 +1,327 @@
+name: Finagra Unity CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref to avoid queue buildup
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # GATE 1: Math Lockdown — pure unit tests, no infra required.
+  # Blocks merge on any mutation of the 50/25/5/20 split constants.
+  # ─────────────────────────────────────────────────────────────────
+  math-lockdown:
+    name: Math Lockdown Gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tests/regression
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: tests/regression/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run Math Lockdown (no infra needed)
+        run: go test -v ./... -run "TestMathLockdown|TestDoubleEntryBalance|TestDomainErrors"
+
+  # ─────────────────────────────────────────────────────────────────
+  # GATE 2: Backend integration tests — full real Postgres + Redis.
+  # Covers: payout, ledger, GPS proof, NDVI, sync, E2E pipeline,
+  # concurrency, audit immutability, NDVI boundary.
+  # ─────────────────────────────────────────────────────────────────
+  backend-integration:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    needs: math-lockdown
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: finagra
+          POSTGRES_PASSWORD: finagra_dev_secret
+          POSTGRES_DB: finagra_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DB_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
+      TEST_API_URL: http://localhost:8888
+      DATABASE_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: apps/backend/go.sum
+
+      - name: Apply database schema
+        run: psql "$TEST_DB_URL" -f schema/schema.sql
+
+      - name: Build backend binary
+        working-directory: apps/backend
+        run: go build -o /tmp/finagra-api .
+
+      - name: Start backend server
+        run: |
+          /tmp/finagra-api &
+          # Wait until health/ready returns 200
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8888/health/ready; then
+              echo "Backend ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Download test dependencies
+        working-directory: tests/regression
+        run: go mod download
+
+      - name: Run integration tests
+        working-directory: tests/regression
+        run: go test -tags integration -v ./... -timeout 180s
+
+  # ─────────────────────────────────────────────────────────────────
+  # GATE 3: Frontend unit tests (Jest + React Testing Library).
+  # Coverage threshold: 80% branches/functions/lines/statements
+  # on components/** and lib/types.ts.
+  # ─────────────────────────────────────────────────────────────────
+  frontend-jest:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    needs: math-lockdown
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Run Jest with coverage
+        run: pnpm test --coverage --ci
+
+  # ─────────────────────────────────────────────────────────────────
+  # GATE 4: MCP server tests — Jest with --runInBand
+  # Tests the 3 agentic workflows and 6 MCP tools against real DB.
+  # ─────────────────────────────────────────────────────────────────
+  mcp-jest:
+    name: MCP Workflow Tests
+    runs-on: ubuntu-latest
+    needs: math-lockdown
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: finagra
+          POSTGRES_PASSWORD: finagra_dev_secret
+          POSTGRES_DB: finagra_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
+      REDIS_URL: redis://localhost:6379
+      FINAGRA_API_URL: http://localhost:8888
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: apps/backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Apply database schema
+        run: psql "$DATABASE_URL" -f schema/schema.sql
+
+      - name: Build and start backend
+        run: |
+          cd apps/backend && go build -o /tmp/finagra-api .
+          /tmp/finagra-api &
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8888/health/ready; then
+              echo "Backend ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build MCP server
+        working-directory: apps/mcp
+        run: pnpm build
+
+      - name: Run MCP Jest tests
+        working-directory: apps/mcp
+        run: pnpm test
+
+  # ─────────────────────────────────────────────────────────────────
+  # GATE 5: Playwright E2E + Accessibility (WCAG 2.1 AA)
+  # Runs against real Next.js dev server + real backend.
+  # ─────────────────────────────────────────────────────────────────
+  e2e-playwright:
+    name: E2E + Accessibility (Playwright)
+    runs-on: ubuntu-latest
+    needs: [backend-integration, frontend-jest]
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: finagra
+          POSTGRES_PASSWORD: finagra_dev_secret
+          POSTGRES_DB: finagra_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: apps/backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Apply database schema
+        run: psql "$DATABASE_URL" -f schema/schema.sql
+
+      - name: Build and start backend
+        run: |
+          cd apps/backend && go build -o /tmp/finagra-api .
+          /tmp/finagra-api &
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8888/health/ready; then
+              echo "Backend ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start Next.js dev server
+        working-directory: apps/web
+        run: pnpm dev &
+
+      - name: Wait for Next.js
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000; then
+              echo "Next.js ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Playwright E2E tests
+        working-directory: apps/web
+        run: pnpm exec playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
