@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
@@ -90,7 +93,11 @@ func main() {
 	landPlotUC := usecase.NewLandPlotUsecase(plotRepo, farmerRepo, logger)
 	syncUC := usecase.NewSyncUsecase(syncRepo, logger)
 
-	accounts := handler.AccountConfig{} // populated from DB seed at startup
+	// Seed & load singleton system accounts (idempotent — safe to call every startup)
+	accounts, err := seedSystemAccounts(ctx, db, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to seed system accounts")
+	}
 	payoutHandler := handler.NewPayoutHandler(payoutUC, accounts)
 	landPlotHandler := handler.NewLandPlotHandler(landPlotUC)
 	syncHandler := handler.NewSyncHandler(syncUC)
@@ -165,4 +172,41 @@ func maskConnString(url string) string {
 		return "***"
 	}
 	return url[:15] + "***"
+}
+
+// seedSystemAccounts ensures the four singleton ledger accounts exist and returns their IDs.
+// Safe to call on every startup — only inserts if the account doesn't exist yet.
+func seedSystemAccounts(ctx context.Context, db *pgxpool.Pool, log zerolog.Logger) (handler.AccountConfig, error) {
+	var cfg handler.AccountConfig
+
+	seeds := []struct {
+		typ string
+		ptr *uuid.UUID
+	}{
+		{"FARMER_WALLET", &cfg.FarmerAccountID},
+		{"PLATFORM_REVENUE", &cfg.PlatformAccountID},
+		{"AGENT_COMMISSION", &cfg.AgentAccountID},
+		{"RESERVE_FUND", &cfg.ReserveAccountID},
+	}
+
+	for _, s := range seeds {
+		err := db.QueryRow(ctx, `SELECT id FROM accounts WHERE account_type = $1 LIMIT 1`, s.typ).Scan(s.ptr)
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = db.QueryRow(ctx, `
+				INSERT INTO accounts (account_type, currency) VALUES ($1::account_type, 'INR')
+				RETURNING id`, s.typ).Scan(s.ptr)
+		}
+		if err != nil {
+			return handler.AccountConfig{}, fmt.Errorf("seed account %s: %w", s.typ, err)
+		}
+	}
+
+	log.Info().
+		Str("farmer_acct", cfg.FarmerAccountID.String()).
+		Str("platform_acct", cfg.PlatformAccountID.String()).
+		Str("agent_acct", cfg.AgentAccountID.String()).
+		Str("reserve_acct", cfg.ReserveAccountID.String()).
+		Msg("system accounts ready")
+
+	return cfg, nil
 }

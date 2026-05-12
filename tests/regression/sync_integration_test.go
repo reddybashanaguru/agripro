@@ -213,19 +213,30 @@ func TestSyncPushIdempotency(t *testing.T) {
 	t.Logf("[Sync] No duplicate rows: count=%d", duplicateCount)
 }
 
-// ─── HTTP helpers ────────────────────────────────────────────────────────────
+// ─── HTTP helpers (shared across all integration tests in this package) ──────
 
 type httpResult struct {
 	Code int
 	Body []byte
 }
 
-func doPost(t *testing.T, url string, payload any) httpResult {
+// doPost marshals payload as JSON and POSTs to url.
+// Optional variadic headers map adds custom request headers (e.g. X-Idempotency-Key).
+func doPost(t *testing.T, url string, payload any, headers ...map[string]string) httpResult {
 	t.Helper()
 	b, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(b)) //nolint:noctx
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	for _, h := range headers {
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err, "POST %s failed", url)
 	defer resp.Body.Close()
 
@@ -243,4 +254,9 @@ func doGet(t *testing.T, url string) httpResult {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	return httpResult{Code: resp.StatusCode, Body: body}
+}
+
+// unmarshal is a typed JSON decode helper.
+func unmarshal(data []byte, v any) error {
+	return json.Unmarshal(data, v)
 }

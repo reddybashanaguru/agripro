@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -29,7 +30,7 @@ var skipPaths = map[string]bool{
 
 // IdempotencyMiddleware enforces idempotency on POST/PUT/PATCH endpoints.
 // On first call: processes normally and caches response in Redis.
-// On replay: returns the cached response immediately, skipping all handlers.
+// On replay: returns 200 OK with the cached body, skipping all handlers.
 // Routes in skipPaths bypass this middleware (they own their idempotency guarantee).
 func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -66,23 +67,27 @@ func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 				var resp cachedResponse
 				if json.Unmarshal(cached, &resp) == nil {
 					c.Response().Header().Set("X-Idempotency-Replay", "true")
-					return c.JSONBlob(resp.Status, resp.Body)
+					// Replays always return 200 regardless of original status (e.g. 201 → 200)
+					return c.JSONBlob(http.StatusOK, resp.Body)
 				}
 			}
 
-			// Process request, intercept response
-			rec := newResponseRecorder(c.Response())
+			// Wrap the underlying http.ResponseWriter to tee status + body
+			rec := &teeResponseWriter{
+				ResponseWriter: c.Response().Writer,
+				status:         http.StatusOK, // default if WriteHeader is never called
+			}
 			c.Response().Writer = rec
 
 			if err := next(c); err != nil {
 				return err
 			}
 
-			// Cache the response for future replays
-			if rec.status >= 200 && rec.status < 300 {
+			// Cache successful responses for future replays
+			if rec.status >= 200 && rec.status < 300 && rec.body.Len() > 0 {
 				payload, _ := json.Marshal(cachedResponse{
 					Status: rec.status,
-					Body:   rec.body.Bytes(),
+					Body:   json.RawMessage(rec.body.Bytes()),
 				})
 				rdb.Set(ctx, cacheKey, payload, idempotencyTTL)
 			}
@@ -92,23 +97,20 @@ func IdempotencyMiddleware(rdb *redis.Client) echo.MiddlewareFunc {
 	}
 }
 
-// responseRecorder captures the response body and status for caching.
-type responseRecorder struct {
-	echo.Response
+// teeResponseWriter intercepts WriteHeader and Write so we can cache the response.
+// It forwards everything to the real underlying writer so the client still receives it.
+type teeResponseWriter struct {
+	http.ResponseWriter
 	status int
-	body   *bodyBuffer
+	body   bytes.Buffer
 }
 
-func newResponseRecorder(resp *echo.Response) *responseRecorder {
-	return &responseRecorder{Response: *resp, body: &bodyBuffer{}}
+func (t *teeResponseWriter) WriteHeader(code int) {
+	t.status = code
+	t.ResponseWriter.WriteHeader(code)
 }
 
-type bodyBuffer struct {
-	data []byte
-}
-
-func (b *bodyBuffer) Bytes() json.RawMessage { return b.data }
-func (b *bodyBuffer) Write(p []byte) (int, error) {
-	b.data = append(b.data, p...)
-	return len(p), nil
+func (t *teeResponseWriter) Write(b []byte) (int, error) {
+	t.body.Write(b) // capture for caching
+	return t.ResponseWriter.Write(b)
 }

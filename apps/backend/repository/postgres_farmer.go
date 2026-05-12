@@ -63,8 +63,9 @@ func (r *postgresFarmerRepo) Update(ctx context.Context, f *domain.Farmer) error
 func scanFarmer(row pgx.Row) (*domain.Farmer, error) {
 	var f domain.Farmer
 	var kycStr string
+	var aadhaarHash *string // nullable column
 	err := row.Scan(
-		&f.ID, &f.Phone, &f.Name, &f.AadhaarHash, &kycStr, &f.FPOID,
+		&f.ID, &f.Phone, &f.Name, &aadhaarHash, &kycStr, &f.FPOID,
 		&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt, &f.LastSyncedAt,
 	)
 	if err != nil {
@@ -72,6 +73,9 @@ func scanFarmer(row pgx.Row) (*domain.Farmer, error) {
 			return nil, nil
 		}
 		return nil, domain.ErrInternal(err)
+	}
+	if aadhaarHash != nil {
+		f.AadhaarHash = *aadhaarHash
 	}
 	f.KYCStatus = domain.KYCStatus(kycStr)
 	return &f, nil
