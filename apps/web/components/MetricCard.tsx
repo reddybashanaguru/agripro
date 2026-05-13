@@ -67,7 +67,7 @@ export function MetricCard({
             )}
             aria-hidden="true"
           >
-            {icon}
+            <>{icon}</>
           </div>
         )}
       </div>

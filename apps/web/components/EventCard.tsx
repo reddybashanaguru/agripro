@@ -93,7 +93,7 @@ function renderData(type: EventType, data: Record<string, unknown>) {
           <dt className="inline text-gray-500">Accuracy: </dt>
           <dd className="inline">{Number(data.accuracy_m ?? 0).toFixed(1)} m</dd>
         </div>
-        {data.spoof_reason && (
+        {!!data.spoof_reason && (
           <div className="col-span-2 truncate text-red-700">
             <dt className="inline text-gray-500">Reason: </dt>
             <dd className="inline">{String(data.spoof_reason)}</dd>
