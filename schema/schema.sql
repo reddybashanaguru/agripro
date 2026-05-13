@@ -290,7 +290,7 @@ CREATE TABLE IF NOT EXISTS proof_of_action (
     longitude              DOUBLE PRECISION NOT NULL,
     latitude               DOUBLE PRECISION NOT NULL,
     accuracy_m             DOUBLE PRECISION NOT NULL,
-    photo_hash             VARCHAR(64) NOT NULL,
+    photo_hash             VARCHAR(128) NOT NULL,
     verdict                action_verdict NOT NULL,
     distance_to_boundary_m DOUBLE PRECISION,
     spoof_reason           TEXT,
