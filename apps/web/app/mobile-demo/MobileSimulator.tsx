@@ -366,28 +366,33 @@ function FarmersScreen({
     try {
       const localId = uuid7();
       const now = Date.now();
-      await apiFetch("/sync/push", {
+      const resp = await apiFetch<{
+        server_ids: { farmers: Record<string, string> };
+        stats: { farmers_created: number };
+      }>("/sync/push", {
         method: "POST",
         body: JSON.stringify({
-          farmers: {
-            created: [
-              {
-                id: localId,
-                name,
-                phone: phone.startsWith("+91") ? phone : `+91${phone}`,
-                kyc_status: kyc,
-                created_at: now,
-                updated_at: now,
-              },
-            ],
-            updated: [],
-            deleted: [],
+          last_pulled_at: 0,
+          changes: {
+            farmers: {
+              created: [
+                {
+                  id: localId,
+                  name,
+                  phone: phone.startsWith("+91") ? phone : `+91${phone}`,
+                  kyc_status: kyc,
+                  updated_at: now,
+                },
+              ],
+              updated: [],
+              deleted: [],
+            },
+            land_plots: { created: [], updated: [], deleted: [] },
           },
-          plots: { created: [], updated: [], deleted: [] },
-          client_timestamp: new Date().toISOString(),
         }),
       });
-      setToast(`✅ Farmer "${name}" registered!`);
+      const serverUUID = resp.server_ids?.farmers?.[localId];
+      setToast(`✅ Farmer "${name}" registered! ID: ${(serverUUID ?? "").slice(0, 8)}…`);
       setName("");
       setPhone("");
       setKyc("PENDING");
@@ -774,31 +779,37 @@ function AddPlotSheet({
   async function submit() {
     setSubmitting(true);
     try {
-      const geom = {
+      // Use a random offset so each plot has unique non-overlapping coordinates
+      const baseLon = 77.0 + Math.random() * 2;
+      const baseLat = 15.0 + Math.random() * 3;
+      const size = 0.005 + Math.random() * 0.005;
+      const geometry = {
         type: "Polygon",
         coordinates: [
           [
-            [78.4, 17.4],
-            [78.401, 17.4],
-            [78.401, 17.401],
-            [78.4, 17.401],
-            [78.4, 17.4],
+            [baseLon, baseLat],
+            [baseLon + size, baseLat],
+            [baseLon + size, baseLat + size],
+            [baseLon, baseLat + size],
+            [baseLon, baseLat],
           ],
         ],
       };
-      await apiFetch("/land-plots", {
+      const resp = await apiFetch<{ id: string; area_acres: number }>("/land-plots", {
         method: "POST",
+        headers: { "X-Idempotency-Key": `demo-plot-${uuid7()}` },
         body: JSON.stringify({
           farmer_id: farmerId,
           plot_name: plotName || "Demo Plot",
-          geom,
+          geometry,
           soil_type: "Black Cotton",
           survey_number: `SV${Math.floor(Math.random() * 9000) + 1000}`,
           district,
           state,
         }),
       });
-      onSuccess();
+      setToast(`✅ Plot added! ${resp.area_acres?.toFixed(1) ?? "?"} acres`);
+      setTimeout(() => { setToast(""); onSuccess(); }, 1500);
     } catch (e: unknown) {
       setToast(`❌ ${(e as Error).message}`);
       setTimeout(() => setToast(""), 3000);
@@ -815,7 +826,7 @@ function AddPlotSheet({
           <button onClick={onClose} className="text-gray-400 text-lg">✕</button>
         </div>
         <div className="bg-amber-50 rounded-lg p-2 text-xs text-amber-800">
-          📍 Using demo coordinates: 17.400°N, 78.400°E (Telangana)
+          📍 Random unique coordinates generated per plot to avoid boundary conflicts
         </div>
         <input
           value={plotName}
