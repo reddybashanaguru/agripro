@@ -1,0 +1,10 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "apps/backend/Dockerfile"
+
+[deploy]
+startCommand = "./finagra-api"
+healthcheckPath = "/health/live"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
