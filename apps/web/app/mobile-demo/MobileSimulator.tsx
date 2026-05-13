@@ -337,8 +337,14 @@ function FarmersScreen({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch<{ farmers: Farmer[] }>("/sync/pull?since=0");
-      setFarmers(data.farmers ?? []);
+      const data = await apiFetch<{
+        changes: { farmers: { created: Farmer[]; updated: Farmer[]; deleted: Farmer[] } };
+      }>("/sync/pull?since=0");
+      const all = [
+        ...(data.changes?.farmers?.created ?? []),
+        ...(data.changes?.farmers?.updated ?? []),
+      ];
+      setFarmers(all);
     } catch {
       setFarmers([]);
     } finally {
@@ -1166,24 +1172,20 @@ function EventsScreen({ online }: { online: boolean }) {
 
 // ─── SYNC SCREEN ─────────────────────────────────────────────────────────────
 
+interface HealthData {
+  status: string;
+  checks: { postgres?: string; redis?: string; nats?: string };
+}
+
 function SyncScreen({ online }: { online: boolean }) {
-  const [health, setHealth] = useState<{ status: string; db: string; redis: string; nats: string } | null>(null);
+  const [health, setHealth] = useState<HealthData | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-
-  async function checkHealth() {
-    try {
-      const h = await apiFetch<{ status: string; db: string; redis: string; nats: string }>("/health/ready".replace("/api/v1", "").replace("/api/v1", ""));
-      setHealth(h);
-    } catch {
-      setHealth(null);
-    }
-  }
 
   useEffect(() => {
     fetch("http://localhost:8888/health/ready")
       .then((r) => r.json())
-      .then((h) => setHealth(h))
+      .then((h: HealthData) => setHealth(h))
       .catch(() => setHealth(null));
   }, []);
 
@@ -1207,20 +1209,20 @@ function SyncScreen({ online }: { online: boolean }) {
             <div className="space-y-1.5">
               {[
                 { label: "API Server", value: health.status },
-                { label: "PostgreSQL", value: health.db },
-                { label: "Redis", value: health.redis },
-                { label: "NATS", value: health.nats },
+                { label: "PostgreSQL", value: health.checks?.postgres ?? "unknown" },
+                { label: "Redis", value: health.checks?.redis ?? "unknown" },
+                { label: "NATS", value: health.checks?.nats ?? "N/A" },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between">
                   <span className="text-xs text-gray-600">{label}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      value === "ok" || value === "ready"
+                      value === "ok" || value === "ready" || value === "N/A"
                         ? "bg-emerald-100 text-emerald-800"
                         : "bg-red-100 text-red-800"
                     }`}
                   >
-                    {value === "ok" || value === "ready" ? "✅ OK" : `⚠️ ${value}`}
+                    {value === "N/A" ? "N/A" : value === "ok" || value === "ready" ? "✅ OK" : `⚠️ ${value}`}
                   </span>
                 </div>
               ))}
