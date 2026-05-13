@@ -529,7 +529,7 @@ function FarmersScreen({
 // ─── FARMER DETAIL SCREEN ────────────────────────────────────────────────────
 
 function FarmerDetailScreen({
-  farmer,
+  farmer: initialFarmer,
   online,
   onBack,
 }: {
@@ -537,10 +537,12 @@ function FarmerDetailScreen({
   online: boolean;
   onBack: () => void;
 }) {
+  const [farmer, setFarmer] = useState(initialFarmer);
   const [plots, setPlots] = useState<LandPlot[]>([]);
   const [amount, setAmount] = useState("");
   const [showPayout, setShowPayout] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [verifyingKyc, setVerifyingKyc] = useState(false);
   const [result, setResult] = useState<null | { txnId: string; split: ReturnType<typeof splitAmount> }>(null);
   const [toast, setToast] = useState("");
   const [showAddPlot, setShowAddPlot] = useState(false);
@@ -608,8 +610,44 @@ function FarmerDetailScreen({
         )}
 
         {farmer.kyc_status !== "VERIFIED" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-            ⚠️ KYC must be VERIFIED before creating payouts
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+            <p className="text-xs text-amber-800 font-medium">
+              ⚠️ KYC status is <strong>{farmer.kyc_status}</strong> — must be VERIFIED to add plots or create payouts
+            </p>
+            <button
+              onClick={async () => {
+                setVerifyingKyc(true);
+                try {
+                  const now = Date.now();
+                  await apiFetch("/sync/push", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      last_pulled_at: 0,
+                      changes: {
+                        farmers: {
+                          created: [],
+                          updated: [{ server_id: farmer.id, name: farmer.name, kyc_status: "VERIFIED", updated_at: now }],
+                          deleted: [],
+                        },
+                        land_plots: { created: [], updated: [], deleted: [] },
+                      },
+                    }),
+                  });
+                  setFarmer((f) => ({ ...f, kyc_status: "VERIFIED" }));
+                  setToast("✅ KYC verified! You can now add plots and create payouts.");
+                  setTimeout(() => setToast(""), 3000);
+                } catch (e: unknown) {
+                  setToast(`❌ KYC update failed: ${(e as Error).message}`);
+                  setTimeout(() => setToast(""), 3000);
+                } finally {
+                  setVerifyingKyc(false);
+                }
+              }}
+              disabled={verifyingKyc}
+              className="w-full py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {verifyingKyc ? "Verifying…" : "✓ Verify KYC Now"}
+            </button>
           </div>
         )}
 
