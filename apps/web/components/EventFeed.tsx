@@ -3,12 +3,87 @@
 import { useEffect, useRef, useState } from "react";
 import { EventCard, type PlatformEvent } from "./EventCard";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8888";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const DEMO_MODE = !API_URL;
 
 type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "error";
 
 const MAX_EVENTS = 50;
+
+const DEMO_EVENTS: PlatformEvent[] = [
+  {
+    id: "demo-1",
+    type: "payout.completed",
+    timestamp: new Date(Date.now() - 8000).toISOString(),
+    data: { txn_id: "txn-demo-001", gross_amount: 75000, farmer_gets: 37500 },
+  },
+  {
+    id: "demo-2",
+    type: "proof.verdict",
+    timestamp: new Date(Date.now() - 22000).toISOString(),
+    data: { verdict: "VERIFIED", accuracy_m: 4.2, farmer_id: "d457d2ae-2dae-4988-a0cc-fc5eda76cd76" },
+  },
+  {
+    id: "demo-3",
+    type: "ndvi.alert",
+    timestamp: new Date(Date.now() - 45000).toISOString(),
+    data: { ndvi_mean: "0.22", threshold: "0.30", source: "Sentinel-2" },
+  },
+  {
+    id: "demo-4",
+    type: "sync.batch",
+    timestamp: new Date(Date.now() - 70000).toISOString(),
+    data: { farmers_created: 3, plots_created: 5 },
+  },
+  {
+    id: "demo-5",
+    type: "payout.completed",
+    timestamp: new Date(Date.now() - 95000).toISOString(),
+    data: { txn_id: "txn-demo-002", gross_amount: 50000, farmer_gets: 25000 },
+  },
+  {
+    id: "demo-6",
+    type: "proof.verdict",
+    timestamp: new Date(Date.now() - 130000).toISOString(),
+    data: { verdict: "SPOOFED", accuracy_m: 0.3, spoof_reason: "GPS accuracy below 1m threshold" },
+  },
+];
+
+function makeLiveEvent(): PlatformEvent {
+  const roll = Math.random();
+  const now = new Date().toISOString();
+  if (roll < 0.4) {
+    const gross = Math.floor(Math.random() * 80000 + 20000);
+    return {
+      id: `live-${Date.now()}`,
+      type: "payout.completed",
+      timestamp: now,
+      data: { txn_id: `txn-${Date.now()}`, gross_amount: gross, farmer_gets: gross * 0.5 },
+    };
+  }
+  if (roll < 0.65) {
+    return {
+      id: `live-${Date.now()}`,
+      type: "proof.verdict",
+      timestamp: now,
+      data: { verdict: Math.random() > 0.15 ? "VERIFIED" : "SPOOFED", accuracy_m: +(Math.random() * 8 + 1).toFixed(1) },
+    };
+  }
+  if (roll < 0.8) {
+    return {
+      id: `live-${Date.now()}`,
+      type: "ndvi.alert",
+      timestamp: now,
+      data: { ndvi_mean: (Math.random() * 0.28 + 0.01).toFixed(2), threshold: "0.30", source: "Sentinel-2" },
+    };
+  }
+  return {
+    id: `live-${Date.now()}`,
+    type: "sync.batch",
+    timestamp: now,
+    data: { farmers_created: Math.floor(Math.random() * 5 + 1), plots_created: Math.floor(Math.random() * 8 + 1) },
+  };
+}
 
 export function EventFeed() {
   const [events, setEvents] = useState<PlatformEvent[]>([]);
@@ -17,6 +92,20 @@ export function EventFeed() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (DEMO_MODE) {
+      // Seed with historical events, then inject live events periodically
+      setTimeout(() => {
+        setStatus("connected");
+        setEvents(DEMO_EVENTS);
+      }, 800);
+
+      const interval = setInterval(() => {
+        setEvents((prev) => [makeLiveEvent(), ...prev].slice(0, MAX_EVENTS));
+      }, 6000);
+
+      return () => clearInterval(interval);
+    }
+
     let closed = false;
 
     function connect() {
