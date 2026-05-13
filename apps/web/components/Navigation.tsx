@@ -10,6 +10,7 @@ import {
   Satellite,
   Radio,
   Leaf,
+  Smartphone,
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/transactions", label: "Transactions", icon: ArrowRightLeft },
   { href: "/sentinel",     label: "Sentinel",     icon: Satellite },
   { href: "/activity",     label: "Activity",     icon: Radio },
+  { href: "/mobile-demo",  label: "Field Agent",  icon: Smartphone },
 ] as const;
 
 export function Navigation() {

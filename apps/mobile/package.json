@@ -11,13 +11,17 @@
   "dependencies": {
     "@nozbe/watermelondb": "^0.27.1",
     "@nozbe/with-observables": "^1.6.0",
-    "react": "18.3.1",
-    "react-native": "0.76.5",
-    "react-native-maps": "^1.18.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/stack": "^6.4.1",
+    "react": "18.3.1",
+    "react-native": "0.76.5",
+    "react-native-gesture-handler": "^2.20.2",
+    "react-native-maps": "^1.18.0",
+    "react-native-safe-area-context": "^4.12.0",
     "react-native-screens": "^3.35.0",
-    "react-native-safe-area-context": "^4.12.0"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

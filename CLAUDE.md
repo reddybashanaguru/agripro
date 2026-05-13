@@ -2,7 +2,7 @@
 
 > Principal Engineer: Claude (Founding)
 > Target: ₹500Cr-scale AgTech platform | ₹75L package proof
-> Steps completed: 11 of 11 planned
+> Steps completed: 12 of 12 planned
 
 ---
 
@@ -391,6 +391,44 @@ DB URL          = postgres://finagra:finagra_dev_secret@localhost:5432/finagra_d
 ---
 
 ## STEP TRACKING TEMPLATE
+
+---
+
+### Step 12 — Mobile App UI + Browser Demo Simulator
+**Delivered:** React Native 0.76 field agent app (17 screens/components) + interactive iPhone simulator in Next.js for investor demos.
+**Files (React Native — apps/mobile/):**
+- `App.tsx` — root entry, SafeAreaProvider + gesture handler
+- `src/theme/index.ts` — design tokens (primary #16a34a, spacing, radius, typography)
+- `src/api/client.ts` — typed API client (BASE: localhost:8888/api/v1), createFarmerViaSync, formatINR
+- `src/components/StatusBadge.tsx` — KYC/verdict badge with dot indicator
+- `src/components/SyncStatusBar.tsx` — health poll every 15s, animated offline indicator
+- `src/components/MetricCard.tsx` — emoji + value + label tile
+- `src/components/FarmerCard.tsx` — touchable row with KYC badge
+- `src/components/EventCard.tsx` — color-coded event card for all 4 NATS types
+- `src/screens/HomeScreen.tsx` — metrics grid (3×2), quick actions, recent payouts
+- `src/screens/FarmersScreen.tsx` — searchable farmer list + FAB
+- `src/screens/AddFarmerScreen.tsx` — form: name, phone, KYC toggle
+- `src/screens/FarmerDetailScreen.tsx` — payout modal with live 50/25/5/20 split preview
+- `src/screens/AddLandPlotScreen.tsx` — MapView polygon overlay + form
+- `src/screens/GPSProofScreen.tsx` — GPS acquisition animation, VERIFIED/SPOOFED spring result
+- `src/screens/ActivityScreen.tsx` — SSE via fetch+ReadableStream, auto-reconnect, 30-event buffer
+- `src/screens/SyncScreen.tsx` — health card, manual sync, offline-first explainer
+- `src/navigation/index.tsx` — 5-tab bottom navigator + HomeStack + FarmersStack
+
+**Files (Browser Simulator — apps/web/):**
+- `app/mobile-demo/MobileSimulator.tsx` — full iPhone 15 Pro frame (393×852px) with Dynamic Island, side buttons, all 5 tabs, all screens, real API calls
+- `app/mobile-demo/page.tsx` — landing page with 6-step investor walkthrough, seed IDs panel, architecture callout
+- `components/Navigation.tsx` — added "Field Agent" link (Smartphone icon → /mobile-demo)
+
+**Key design decisions:**
+- GPS proof uses fetch+ReadableStream SSE (no native EventSource in bare RN)
+- Farmer creation goes through /sync/push (WatermelonDB offline-first path — no /farmers POST)
+- Emoji tab icons avoid react-native-vector-icons native linking complexity
+- Browser simulator makes real HTTP calls to :8888 — all demo flows are live, not mocked
+
+**Tests:** 0 new (UI demo — covered by existing integration + E2E suites)
+
+---
 
 When completing a future step, append a new section under **BUILD HISTORY** following this exact format:
 
