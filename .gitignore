@@ -37,3 +37,4 @@ coverage/
 
 # Compiled binaries
 apps/backend/bin/
+.vercel
