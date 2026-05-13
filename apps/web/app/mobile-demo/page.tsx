@@ -98,8 +98,7 @@ export default function MobileDemoPage() {
         {/* Demo walkthrough guide */}
         <div className="flex-1 min-w-0 space-y-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Investor Demo Walkthrough</h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="text-sm text-gray-600">
               Follow these 6 steps to walk through the complete field agent workflow.
             </p>
           </div>
