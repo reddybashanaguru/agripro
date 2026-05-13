@@ -882,20 +882,19 @@ function GPSProofScreen({ online }: { online: boolean }) {
     setStep("submitting");
     try {
       const hash = `mobile_demo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      // URL: /land-plots/:plot_id/proof-of-action — plot_id is in the path
       const resp = await apiFetch<{
         verdict: string;
         distance_to_boundary_m: number | null;
         spoof_reason?: string;
-      }>("/proof-of-action", {
+      }>(`/land-plots/${plotId}/proof-of-action`, {
         method: "POST",
         body: JSON.stringify({
           farmer_id: farmerId,
-          plot_id: plotId,
           longitude: COORDS.lon,
           latitude: COORDS.lat,
           accuracy_m: COORDS.accuracy,
           photo_hash: hash,
-          submitted_at: new Date().toISOString(),
         }),
       });
       setResult({
