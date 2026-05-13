@@ -1,12 +1,25 @@
 # Finagra Unity
 
-> Bank-grade AgTech payments platform — ₹500Cr scale proof for a ₹75L package
+> Full-stack AgTech ops platform — farmer onboarding, GPS field verification, satellite crop monitoring, profit-share disbursement, and AI-agentic workflows via MCP.
 
-Finagra Unity is a production-quality monorepo demonstrating end-to-end financial infrastructure for agricultural credit disbursement: double-entry ledger, GPS fraud prevention, satellite crop monitoring, offline-first mobile sync, AI-agentic workflows via MCP, and real-time event streaming — all validated by 202+ automated tests across 5 CI gates.
+**Live demo (no backend needed):** [finagra-unity.vercel.app/mobile-demo](https://finagra-unity.vercel.app/mobile-demo)
 
 ---
 
-## Architecture at a Glance
+## What This Solves
+
+Rural agripreneurs need a system that works where they work — offline in the field, across poor connectivity, with transparent profit-sharing that farmers can verify themselves. This platform handles the full ops loop:
+
+1. **Field onboarding** — farmer registration + land plot creation with GPS boundary capture
+2. **GPS fraud prevention** — anti-spoofing engine that flags low-accuracy or duplicate submissions
+3. **Satellite crop monitoring** — NDVI threshold enforcement (< 0.30 blocks disbursement)
+4. **Profit-share disbursement** — 50/25/5/20 split (farmer / platform / agent / reserve) with double-entry ledger and idempotency guarantees
+5. **Offline-first mobile sync** — WatermelonDB delta-sync lets field agents work without connectivity
+6. **AI agent layer** — MCP server with 8 tools and 3 agentic workflows that orchestrate the above over a structured API
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -14,8 +27,8 @@ Finagra Unity is a production-quality monorepo demonstrating end-to-end financia
 │                                                                     │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
 │  │  Next.js 15  │    │  React Native│    │   MCP stdio server   │  │
-│  │  App Router  │    │  WatermelonDB│    │   (AI Agent layer)   │  │
-│  │  (Web CC)    │    │  (Mobile)    │    │   8 tools + 3 flows  │  │
+│  │  Ops Command │    │  Field Agent │    │   (AI Agent layer)   │  │
+│  │  Center      │    │  WatermelonDB│    │   8 tools + 3 flows  │  │
 │  └──────┬───────┘    └──────┬───────┘    └──────────┬───────────┘  │
 │         │                   │ delta-sync             │              │
 │         └───────────────────┴────────────────────────┘             │
@@ -61,35 +74,25 @@ Finagra Unity is a production-quality monorepo demonstrating end-to-end financia
 finagra-unity/
 ├── apps/
 │   ├── backend/                 # Go API server
-│   │   ├── config/              # env var loading
 │   │   ├── domain/              # entities, events, errors (zero deps)
 │   │   ├── usecase/             # business logic + EventPublisher
-│   │   ├── repository/          # interfaces + Postgres implementations
+│   │   ├── repository/          # Postgres implementations
 │   │   ├── handler/             # HTTP handlers (thin adapters)
-│   │   ├── middleware/          # audit, idempotency, otel, correlation
-│   │   ├── observability/       # OTel provider init
-│   │   └── main.go              # DI wiring, Echo server, graceful shutdown
-│   ├── web/                     # Next.js 15 Investor Command Center
-│   │   ├── app/                 # App Router pages (ISR/SSR/force-dynamic)
+│   │   └── middleware/          # audit, idempotency, otel, correlation
+│   ├── web/                     # Next.js 15 Ops Command Center
+│   │   ├── app/
 │   │   │   ├── page.tsx         # Dashboard
 │   │   │   ├── ledger/          # Global Ledger Balance
 │   │   │   ├── transactions/    # Transaction history
 │   │   │   ├── sentinel/        # Satellite NDVI monitoring
-│   │   │   └── activity/        # Live event feed (SSE)
-│   │   ├── components/          # EventCard, EventFeed, MetricCard, etc.
-│   │   ├── lib/                 # api.ts, types.ts, formatters
-│   │   ├── e2e/                 # Playwright specs (WCAG 2.1 AA)
-│   │   └── __tests__/           # Jest + RTL unit tests
-│   ├── mobile/                  # React Native app
+│   │   │   ├── activity/        # Live event feed (SSE)
+│   │   │   └── mobile-demo/     # Interactive iPhone simulator for demos
+│   ├── mobile/                  # React Native field agent app
 │   │   └── watermelon/          # WatermelonDB schema + sync engine
 │   └── mcp/                     # MCP stdio AI agent server
 │       └── src/
 │           ├── tools/           # 8 MCP tools
 │           └── workflows/       # 3 agentic workflows
-├── packages/
-│   └── core/                    # Shared TypeScript / Zod schemas
-├── infra/
-│   └── docker/                  # docker-compose.yml (full stack)
 ├── schema/
 │   └── schema.sql               # PostGIS DDL — single source of truth
 ├── tests/
@@ -97,16 +100,15 @@ finagra-unity/
 ├── docs/
 │   ├── HLD.md                   # High-Level Design
 │   └── LLD.md                   # Low-Level Design
-├── .github/
-│   └── workflows/ci.yml         # 5-gate CI pipeline
-└── CLAUDE.md                    # Engineering runbook (AI memory)
+└── .github/
+    └── workflows/ci.yml         # 5-gate CI pipeline
 ```
 
 ---
 
-## The 50/25/5/20 Math Laws (Immutable)
+## The Profit-Share Model (Immutable Math Law)
 
-Every rupee entering the Finagra ledger must split as:
+Every disbursement splits as follows — enforced at the domain layer with `shopspring/decimal` (no float arithmetic) and verified by a regression test that blocks any PR mutating these constants:
 
 | Bucket | Split | Role |
 |---|---|---|
@@ -115,159 +117,91 @@ Every rupee entering the Finagra ledger must split as:
 | AGENT_COMMISSION | 5% | FPO / onboarding agent |
 | RESERVE_FUND | 20% | Insurance pool |
 
-- All arithmetic uses `shopspring/decimal` — never `float64`
-- `FARMER + PLATFORM + AGENT + RESERVE == GROSS` must hold (decimal equality)
-- 8 journal entries per payout (4 debits + 4 credits)
-- `TestMathLockdown` blocks any merge that mutates these constants
+- 8 journal entries per payout (4 debits + 4 credits) in a single DB transaction
+- `FARMER + PLATFORM + AGENT + RESERVE == GROSS` enforced by decimal equality + DB trigger
 
 ---
 
-## Quick Start
+## MCP AI Agent Layer
 
-### Prerequisites
-- Docker + Docker Compose
-- Go 1.25+
-- Node.js 22+, pnpm 9+
+The MCP server exposes the platform as a structured API for AI agents. Three production workflows:
 
-### 1. Start infrastructure
+| Workflow | Steps |
+|---|---|
+| `smart-payout` | eligibility check → GPS proof verify → disburse |
+| `field-inspection` | GPS proof + NDVI correlation → risk flag |
+| `platform-audit` | ledger balance + audit trail verification |
 
-```bash
-cd infra/docker
-docker-compose up -d
-```
+Any Claude-compatible client (Claude Desktop, Claude Code, custom agents) can invoke these workflows over stdio.
 
-Services started: PostGIS :5432, Redis :6379, NATS :4222, Prometheus :9090, Grafana :3001
+---
 
-### 2. Apply schema
+## Quick Start (Local)
 
 ```bash
-psql postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev?sslmode=disable \
-  -f schema/schema.sql
-```
+# 1. Infrastructure
+cd infra/docker && docker-compose up -d
 
-### 3. Start backend
+# 2. Schema
+psql postgres://finagra:finagra_dev_secret@localhost:5432/finagra_dev -f schema/schema.sql
 
-```bash
-cd apps/backend
-go run . &
-# Backend available at http://localhost:8888
-```
+# 3. Backend
+cd apps/backend && go run .
 
-### 4. Start web frontend
-
-```bash
-pnpm install
-cd apps/web
-pnpm dev
-# Frontend available at http://localhost:3000
-```
-
-### 5. Start MCP server (optional — for AI agent workflows)
-
-```bash
-cd apps/mcp
-pnpm build
-node dist/server.js
+# 4. Web
+pnpm install && cd apps/web && pnpm dev
 ```
 
 ---
 
 ## Running Tests
 
-### Math Lockdown (fast, no infra)
-
 ```bash
-cd tests/regression
-go test -v ./... -run "TestMathLockdown|TestDoubleEntryBalance|TestDomainErrors"
-```
+# Math lockdown — no infra needed
+cd tests/regression && go test -v ./... -run "TestMathLockdown"
 
-### Backend integration tests (requires PostGIS + Redis + NATS)
-
-```bash
-cd tests/regression
+# Full backend integration (PostGIS + Redis + NATS)
 go test -tags integration -v ./... -timeout 180s
-```
 
-### Frontend unit tests (Jest + RTL, 80% coverage threshold)
+# Frontend unit
+cd apps/web && pnpm test --coverage --ci
 
-```bash
-cd apps/web
-pnpm test --coverage --ci
-```
+# MCP server
+cd apps/mcp && pnpm test
 
-### MCP server tests
-
-```bash
-cd apps/mcp
-pnpm test
-```
-
-### Playwright E2E + Accessibility (requires running stack)
-
-```bash
-cd apps/web
-pnpm exec playwright test
+# Playwright E2E + WCAG 2.1 AA
+cd apps/web && pnpm exec playwright test
 ```
 
 ---
 
-## API Reference
-
-All endpoints are under `http://localhost:8888/api/v1`.
+## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health/live` | Liveness probe |
 | GET | `/health/ready` | Readiness probe (DB + Redis) |
-| POST | `/farmers` | Register farmer |
-| GET | `/farmers/:id` | Get farmer |
-| POST | `/land-plots` | Create land plot |
-| GET | `/land-plots/:id` | Get land plot |
-| POST | `/payouts` | Disburse payout (idempotent) |
-| GET | `/payouts/:id` | Get payout |
-| GET | `/transactions` | List transactions |
-| GET | `/ledger/balance` | Global ledger balance |
-| POST | `/land-plots/:id/proof-of-action` | Submit GPS proof |
-| GET | `/land-plots/:id/proof-of-action` | List proofs for plot |
-| POST | `/satellite/observations` | Ingest NDVI observation |
-| GET | `/satellite/observations` | Query NDVI history |
 | POST | `/sync/push` | Mobile offline sync push |
 | GET | `/sync/pull` | Mobile delta pull |
+| POST | `/payouts` | Disburse payout (idempotent) |
+| GET | `/ledger/balance` | Global ledger balance |
+| POST | `/land-plots/:id/proof-of-action` | Submit GPS proof |
+| POST | `/satellite/observations` | Ingest NDVI observation |
 | GET | `/events/stream` | SSE live event stream |
 | GET | `/metrics` | Prometheus metrics |
-
-### Key Headers
-
-| Header | Required On | Purpose |
-|---|---|---|
-| `X-Idempotency-Key` | POST /payouts | Exactly-once payout guarantee |
-| `X-Correlation-ID` | All | Distributed trace correlation |
-
----
-
-## Domain Invariants
-
-| Invariant | Rule |
-|---|---|
-| NDVI threshold | `< 0.30` → blocked (422) |
-| Anti-spoofing | `accuracy_m ≤ 0` or duplicate `photo_hash` → SPOOFED |
-| Audit log | Append-only (DB trigger rejects UPDATE/DELETE) |
-| Double-entry | `enforce_double_entry` trigger rejects imbalanced journals |
-| Idempotency race | Thundering herd losers get 500; exactly 1 DB row guaranteed |
 
 ---
 
 ## CI Pipeline (5 Gates)
 
 ```
-Gate 1: Math Lockdown   → Pure unit tests (no infra)
-Gate 2: Backend Integration → Real PostGIS + Redis + NATS
-Gate 3: Frontend Jest   → 80% coverage threshold
-Gate 4: MCP Jest        → 8 tools + 3 workflows
-Gate 5: Playwright E2E  → WCAG 2.1 AA accessibility
+Gate 1: Math Lockdown       → pure unit, no infra
+Gate 2: Backend Integration → real PostGIS + Redis + NATS (parallel)
+Gate 3: Frontend Jest       → 80% coverage threshold (parallel)
+Gate 4: MCP Jest            → 8 tools + 3 workflows (parallel)
+Gate 5: Playwright E2E      → WCAG 2.1 AA accessibility (requires 2+3)
 ```
 
-Gates 2, 3, 4 run in parallel after Gate 1. Gate 5 requires Gates 2 and 3 to pass.
+**Total: 202+ tests**
 
 ---
 
@@ -279,40 +213,5 @@ Gates 2, 3, 4 run in parallel after Gate 1. Gate 5 requires Gates 2 and 3 to pas
 | `REDIS_URL` | — | Redis connection string |
 | `NATS_URL` | `nats://127.0.0.1:4222` | NATS connection string |
 | `PORT` | `8888` | Backend listen port |
-| `APP_ENV` | `development` | Environment name |
-| `FINAGRA_API_URL` | `http://localhost:8888` | MCP server → backend |
-
----
-
-## What Was Built (11 Steps)
-
-| Step | Deliverable | Tests |
-|---|---|---|
-| 1 | Domain entities + math laws + Clean Architecture scaffold | 11 pure unit |
-| 2 | Postgres schema + double-entry ledger + idempotency middleware | — |
-| 3 | Payout usecase + journal entries + Redis idempotency | 3 integration |
-| 4 | PostGIS land plots + GPS proof of action + anti-spoofing | 5 integration |
-| 5 | Satellite NDVI ingestion + boundary enforcement (0.30) | 4 integration |
-| 6 | WatermelonDB mobile schema + delta-sync API + audit triggers | 2 integration |
-| 7 | MCP stdio server — 8 tools + 3 agentic workflows | 46 Jest |
-| 8 | Next.js 15 Investor Command Center (Dashboard, Ledger, Sentinel, Transactions) | 80 Jest + Playwright |
-| 9 | Playwright E2E + WCAG 2.1 AA accessibility | 5 Playwright specs |
-| 10 | OpenTelemetry traces + Prometheus metrics + Grafana dashboards | — |
-| 11 | NATS event streaming + SSE Activity feed + EventCard/EventFeed components | 8 integration + 16 Jest |
-
-**Total: 202+ tests across Go integration, Jest unit, and Playwright E2E.**
-
----
-
-## Ports
-
-| Service | Port |
-|---|---|
-| Backend API | 8888 |
-| Next.js Web | 3000 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| NATS | 4222 |
-| Prometheus | 9090 |
-| Grafana | 3001 |
-| Adminer | 8080 |
+| `APP_ENV` | `development` | `development` or `production` |
+| `NEXT_PUBLIC_API_URL` | — | Web → backend URL (empty = demo mode) |
