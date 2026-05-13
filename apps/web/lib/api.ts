@@ -5,7 +5,9 @@ import type {
   JournalEntriesResponse,
 } from "./types";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+// NEXT_PUBLIC_ vars may be inlined as the string "undefined" by SWC when unset
+const _raw = process.env.NEXT_PUBLIC_API_URL;
+const BACKEND_URL = (!_raw || _raw === "undefined") ? "" : _raw;
 const API_BASE = BACKEND_URL || "http://localhost:8888";
 const DEMO_MODE = !BACKEND_URL;
 
@@ -165,9 +167,11 @@ async function fetchAPI<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getLedgerBalance(): Promise<LedgerBalance> {
   if (DEMO_MODE) return MOCK_BALANCE;
-  return fetchAPI<LedgerBalance>("/ledger/balance", {
-    next: { revalidate: 30 },
-  });
+  try {
+    return await fetchAPI<LedgerBalance>("/ledger/balance", { next: { revalidate: 30 } });
+  } catch {
+    return MOCK_BALANCE;
+  }
 }
 
 export async function getTransactions(
@@ -178,28 +182,35 @@ export async function getTransactions(
     const sliced = MOCK_TRANSACTIONS.transactions.slice(offset, offset + limit);
     return { ...MOCK_TRANSACTIONS, transactions: sliced, limit, offset };
   }
-  return fetchAPI<TransactionListResponse>(
-    `/transactions?limit=${limit}&offset=${offset}`,
-    { next: { revalidate: 15 } }
-  );
+  try {
+    return await fetchAPI<TransactionListResponse>(
+      `/transactions?limit=${limit}&offset=${offset}`,
+      { next: { revalidate: 15 } }
+    );
+  } catch {
+    const sliced = MOCK_TRANSACTIONS.transactions.slice(offset, offset + limit);
+    return { ...MOCK_TRANSACTIONS, transactions: sliced, limit, offset };
+  }
 }
 
 export async function getPlatformMetrics(): Promise<PlatformMetrics> {
   if (DEMO_MODE) return MOCK_METRICS;
-  return fetchAPI<PlatformMetrics>("/metrics-platform", {
-    next: { revalidate: 60 },
-  });
+  try {
+    return await fetchAPI<PlatformMetrics>("/metrics-platform", { next: { revalidate: 60 } });
+  } catch {
+    return MOCK_METRICS;
+  }
 }
 
 export async function getJournalEntries(
   txnId: string
 ): Promise<JournalEntriesResponse> {
-  if (DEMO_MODE) {
+  if (DEMO_MODE) return { txn_id: txnId, entries: [], count: 0 };
+  try {
+    return await fetchAPI<JournalEntriesResponse>(`/payouts/${txnId}/entries`, { next: { revalidate: 300 } });
+  } catch {
     return { txn_id: txnId, entries: [], count: 0 };
   }
-  return fetchAPI<JournalEntriesResponse>(`/payouts/${txnId}/entries`, {
-    next: { revalidate: 300 },
-  });
 }
 
 // ─── Client-side fetchers (used as SWR keys) ──────────────────────────────────

@@ -3,7 +3,7 @@ import { Satellite, AlertTriangle, CheckCircle, Info } from "lucide-react";
 import { getPlatformMetrics } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Satellite Sentinel" };
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function SentinelPage() {
   let metrics;

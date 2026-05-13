@@ -17,8 +17,7 @@ export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-// Revalidate every 30 s — keeps data fresh without blocking render
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const [balance, txnResp, metrics] = await Promise.allSettled([
