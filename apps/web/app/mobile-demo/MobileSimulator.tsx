@@ -2,12 +2,16 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { formatINR, formatDate } from "@/lib/types";
+import { mockApiFetch, mockEventStream } from "./mockData";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
-const API_BASE = "http://localhost:8888/api/v1";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const API_BASE    = BACKEND_URL ? `${BACKEND_URL}/api/v1` : "";
+const DEMO_MODE   = !BACKEND_URL;
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  if (DEMO_MODE) return mockApiFetch<T>(path, opts);
   const r = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: { "Content-Type": "application/json", ...(opts?.headers ?? {}) },
@@ -216,7 +220,7 @@ function HomeScreen({ online, onGoToFarmers, onGoToGPS, onGoToEvents, onAddFarme
             ))}
           </div>
         )}
-        {error && (
+        {error && !DEMO_MODE && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-xs">
             ⚠️ Cannot reach backend — make sure the Go server is running on :8888
           </div>
@@ -962,7 +966,7 @@ function GPSProofScreen({ online }: { online: boolean }) {
   const [plotId, setPlotId] = useState("8d510da6-22f3-43de-a4cc-0e6e87109526");
   const [loadingPlots, setLoadingPlots] = useState(false);
   const [result, setResult] = useState<{ verdict: string; distance: number | null; reason?: string } | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const COORDS = { lat: 17.4005, lon: 78.4005, accuracy: 4.2 };
 
@@ -1178,8 +1182,26 @@ function EventsScreen({ online, onEventCount }: { online: boolean; onEventCount:
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+
+    if (DEMO_MODE) {
+      setConnStatus("connected");
+      try {
+        for await (const chunk of mockEventStream()) {
+          if (ctrl.signal.aborted) break;
+          const dataLine = chunk.replace(/^data:\s*/, "").trim();
+          if (dataLine) {
+            try {
+              const ev = JSON.parse(dataLine) as PlatformEvent;
+              setEvents((prev) => { const next = [ev, ...prev].slice(0, 30); onEventCount(next.length); return next; });
+            } catch {}
+          }
+        }
+      } catch {}
+      return;
+    }
+
     try {
-      const resp = await fetch("http://localhost:8888/api/v1/events/stream", {
+      const resp = await fetch(`${API_BASE}/events/stream`, {
         signal: ctrl.signal,
         headers: { Accept: "text/event-stream" },
       });
@@ -1283,14 +1305,14 @@ function EventsScreen({ online, onEventCount }: { online: boolean; onEventCount:
                 </div>
                 <p className="text-xs text-gray-400 font-mono truncate">{ev.subject}</p>
                 <div className="mt-1 space-y-0.5">
-                  {(ev.payload as Record<string, unknown>).gross_amount && (
+                  {(ev.payload as Record<string, unknown>).gross_amount != null && (
                     <p className="text-xs text-gray-700">💰 {formatINR(String((ev.payload as Record<string, unknown>).gross_amount))}</p>
                   )}
-                  {(ev.payload as Record<string, unknown>).verdict && (
+                  {(ev.payload as Record<string, unknown>).verdict != null && (
                     <p className="text-xs text-gray-700">Verdict: <span className="font-semibold">{String((ev.payload as Record<string, unknown>).verdict)}</span></p>
                   )}
-                  {(ev.payload as Record<string, unknown>).ndvi_mean && (
-                    <p className="text-xs text-gray-700">NDVI: {String((ev.payload as Record<string, unknown>).ndvi_mean)}</p>
+                  {((ev.payload as Record<string, unknown>).ndvi_mean != null || (ev.payload as Record<string, unknown>).ndvi_value != null) && (
+                    <p className="text-xs text-gray-700">NDVI: {String((ev.payload as Record<string, unknown>).ndvi_mean ?? (ev.payload as Record<string, unknown>).ndvi_value)}</p>
                   )}
                 </div>
               </div>
@@ -1313,9 +1335,8 @@ function SyncScreen({ online }: { online: boolean }) {
   const [syncStats, setSyncStats] = useState<{ farmers: number; plots: number } | null>(null);
 
   const checkHealth = useCallback(() => {
-    fetch("http://localhost:8888/health/ready")
-      .then((r) => r.json())
-      .then((h: HealthData) => setHealth(h))
+    apiFetch<HealthData>("/health/ready")
+      .then((h) => setHealth(h))
       .catch(() => setHealth(null));
   }, []);
 
@@ -1463,7 +1484,8 @@ export function MobileSimulator() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:8888/health/live")
+    if (DEMO_MODE) { setOnline(true); return; }
+    fetch(`${BACKEND_URL}/health/live`)
       .then(() => setOnline(true))
       .catch(() => setOnline(false));
   }, []);
@@ -1471,6 +1493,13 @@ export function MobileSimulator() {
   function goToTab(t: Tab) { setSelectedFarmer(null); setOpenAddFarmer(false); setTab(t); }
 
   return (
+    <div className="flex flex-col items-center gap-2">
+    {DEMO_MODE && (
+      <div className="flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1 rounded-full font-medium">
+        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+        Demo Mode — seeded data · deploy backend for live calls
+      </div>
+    )}
     <div className="relative" style={{ width: 393, height: 852 }}>
       {/* Phone chrome */}
       <div className="absolute inset-0 rounded-[47px] shadow-2xl"
@@ -1520,6 +1549,7 @@ export function MobileSimulator() {
       <div className="absolute rounded-l-sm bg-gray-600" style={{ left: -3, top: 120, width: 4, height: 28 }} />
       <div className="absolute rounded-l-sm bg-gray-600" style={{ left: -3, top: 168, width: 4, height: 52 }} />
       <div className="absolute rounded-l-sm bg-gray-600" style={{ left: -3, top: 230, width: 4, height: 52 }} />
+    </div>
     </div>
   );
 }
