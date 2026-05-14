@@ -14,9 +14,9 @@
 ├───────────────────────────┬─────────────────────────────────────┤
 │  Layer                    │  Technology                         │
 ├───────────────────────────┼─────────────────────────────────────┤
-│  Investor Command Center  │  Next.js 15 (App Router, RSC, ISR)  │
+│  Investor Command Center  │  Next.js 15.5.18 (App Router, RSC)  │
 │  Agentic MCP Server       │  @modelcontextprotocol/sdk, Node.js │
-│  API Backend              │  Go 1.24 + Echo v4                  │
+│  API Backend              │  Go 1.25 + Echo v4                  │
 │  Database                 │  PostGIS 17 (GIST indexes)          │
 │  Cache / Idempotency      │  Redis 7                            │
 │  Observability            │  OpenTelemetry + Prometheus          │
@@ -349,6 +349,28 @@ If `is_balanced: false` is ever returned:
 | GET /metrics-platform | 15ms  | 80ms  | 99.5%        |
 | POST /proof-of-action | 50ms  | 250ms | 99.9%        |
 | GET /health/ready     | 5ms   | 20ms  | 99.99%       |
+
+---
+
+---
+
+## 15. Deployment
+
+### Web Frontend
+- **Platform**: Vercel (Hobby — free)
+- **Live URL**: https://finagra-unity.vercel.app
+- **Mobile Demo**: https://finagra-unity.vercel.app/mobile-demo
+- **Config**: `apps/web/vercel.json` + Vercel project `rootDirectory: "apps/web"`
+- **Demo Mode**: all pages run with seeded mock data when `NEXT_PUBLIC_API_URL` is unset; set it to switch to live backend
+- **Deploy command**: `npx vercel --prod --yes` from repo root
+
+### Backend API
+- **Dockerfile**: `apps/backend/Dockerfile` (multi-stage Go build, repo-root context)
+- **Railway config**: `railway.toml` at repo root
+- **Database**: Supabase (PostgreSQL + PostGIS free tier) — run `schema/schema.sql` after provisioning
+- **Cache**: Upstash Redis (free tier, 10K req/day)
+- **Required env vars**: `DATABASE_URL`, `REDIS_URL`, `APP_ENV=production`, `PORT=8888`
+- **NATS**: optional — platform falls back to `NoopPublisher` gracefully if unavailable
 
 ---
 

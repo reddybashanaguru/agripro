@@ -2,7 +2,12 @@
 
 > Full-stack AgTech ops platform — farmer onboarding, GPS field verification, satellite crop monitoring, profit-share disbursement, and AI-agentic workflows via MCP.
 
-**Live demo (no backend needed):** [finagra-unity.vercel.app/mobile-demo](https://finagra-unity.vercel.app/mobile-demo)
+| | URL |
+|---|---|
+| **Investor Command Center** | [finagra-unity.vercel.app](https://finagra-unity.vercel.app) |
+| **Field Agent Mobile Demo** | [finagra-unity.vercel.app/mobile-demo](https://finagra-unity.vercel.app/mobile-demo) |
+
+Both run in **Demo Mode** when no backend is configured — all pages show seeded data (142 farmers, 89 plots, ₹18.5L disbursed) and the Activity feed streams simulated live events. Set `NEXT_PUBLIC_API_URL` to point at a live backend to switch to real data.
 
 ---
 
@@ -151,6 +156,28 @@ cd apps/backend && go run .
 # 4. Web
 pnpm install && cd apps/web && pnpm dev
 ```
+
+---
+
+## Production Deployment
+
+### Web Frontend (Vercel — free Hobby plan)
+
+```bash
+# From repo root — Vercel reads rootDirectory: "apps/web" from project settings
+npx vercel --prod --yes
+```
+
+Live at `https://finagra-unity.vercel.app`. Demo Mode activates automatically when `NEXT_PUBLIC_API_URL` is not set.
+
+### Backend API (Railway)
+
+`apps/backend/Dockerfile` and `railway.toml` are ready. Steps:
+
+1. **Supabase** — create a free project, run `schema/schema.sql` in the SQL editor, copy the connection string as `DATABASE_URL`
+2. **Upstash** — create a free Redis database, copy the URL as `REDIS_URL`
+3. **Railway** — new project → deploy from GitHub → set `DATABASE_URL`, `REDIS_URL`, `APP_ENV=production`, `PORT=8888`
+4. Set `NEXT_PUBLIC_API_URL=<railway-url>` in Vercel → redeploy to switch from Demo Mode to live data
 
 ---
 

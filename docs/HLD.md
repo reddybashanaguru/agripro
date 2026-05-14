@@ -1,6 +1,7 @@
 # Finagra Unity — High-Level Design
 
-> Version: Step 11 complete | Last updated: 2026-05-12
+> Version: Step 12 complete | Last updated: 2026-05-14
+> Live demo: https://finagra-unity.vercel.app | Mobile demo: https://finagra-unity.vercel.app/mobile-demo
 
 ---
 
@@ -82,18 +83,21 @@ Clean Architecture with strict layer isolation:
 ┌──────────────────────────────────────────────────────────┐
 │                Next.js 15 App Router                     │
 │                                                          │
-│  Server Components (ISR/SSR):                           │
-│  - Dashboard page (revalidate: 30s)                     │
-│  - Ledger, Transactions, Sentinel pages                 │
+│  Server Components (force-dynamic SSR + Demo Mode):     │
+│  - Dashboard, Ledger, Transactions, Sentinel pages      │
 │  - server-side fetch via lib/api.ts                     │
+│  - Demo Mode: mock data when NEXT_PUBLIC_API_URL unset  │
 │                                                          │
 │  Client Components ("use client"):                      │
 │  - Navigation (usePathname)                             │
-│  - EventFeed (EventSource SSE + useState/useEffect)     │
+│  - EventFeed (SSE + Demo Mode with synthetic events)    │
 │  - NDVIGauge (interactive)                              │
 │                                                          │
 │  Pure Components (no hooks):                            │
 │  - EventCard, MetricCard, StatusBadge, etc.             │
+│                                                          │
+│  Deployed: https://finagra-unity.vercel.app             │
+│  Mobile:   https://finagra-unity.vercel.app/mobile-demo │
 └──────────────────────────────────────────────────────────┘
 ```
 

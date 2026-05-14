@@ -1,8 +1,9 @@
 # Finagra Unity — Permanent Engineering Memory
 
 > Principal Engineer: Claude (Founding)
-> Target: ₹500Cr-scale AgTech platform | ₹75L package proof
+> Target: ₹500Cr-scale AgTech platform
 > Steps completed: 12 of 12 planned
+> Live demo: https://finagra-unity.vercel.app
 
 ---
 
@@ -255,7 +256,7 @@ DB URL          = postgres://finagra:finagra_dev_secret@localhost:5432/finagra_d
 ### Step 8 — Next.js 15 Investor Command Center
 **Delivered:** 5-page web app (Dashboard, Ledger, Transactions, Sentinel), accessible components.
 **Files:**
-- `apps/web/app/page.tsx` — Dashboard (ISR 30s)
+- `apps/web/app/page.tsx` — Dashboard (force-dynamic, Demo Mode fallback)
 - `apps/web/app/ledger/page.tsx` — Global Ledger Balance
 - `apps/web/app/transactions/page.tsx` — Transaction history
 - `apps/web/app/sentinel/page.tsx` — NDVI monitoring
@@ -375,6 +376,38 @@ DB URL          = postgres://finagra:finagra_dev_secret@localhost:5432/finagra_d
 - [ ] K8s Helm chart
 - [ ] Blue/green deployment config
 - [ ] Secrets manager integration (currently env vars)
+
+---
+
+## PRODUCTION DEPLOYMENT
+
+### Web Frontend (Vercel)
+
+- **Live URL**: https://finagra-unity.vercel.app
+- **Mobile Demo**: https://finagra-unity.vercel.app/mobile-demo
+- **Project**: `finagra-unity` on Vercel (deployed from repo root, `rootDirectory: apps/web` set on Vercel project)
+- **Deploy command**: `npx vercel --prod --yes` (from repo root — no `--cwd` flag)
+- **Demo Mode**: all pages show seeded mock data when `NEXT_PUBLIC_API_URL` is unset/`"undefined"` — no backend needed for investors to see the platform
+
+### Demo Mode Architecture (Critical)
+
+SWC inlines `process.env.NEXT_PUBLIC_API_URL` as the string `"undefined"` (not JS `undefined`) when the env var is not set. The defensive guard in `apps/web/lib/api.ts`:
+
+```typescript
+const _raw = process.env.NEXT_PUBLIC_API_URL;
+const BACKEND_URL = (!_raw || _raw === "undefined") ? "" : _raw;
+const DEMO_MODE = !BACKEND_URL;
+```
+
+All server pages use `export const dynamic = "force-dynamic"` (NOT `revalidate`) so they render at request-time with live `process.env`. Static pre-rendering bakes in null/error states.
+
+### Backend API (Railway)
+
+- **Dockerfile**: `apps/backend/Dockerfile` (multi-stage Go build, repo root as build context)
+- **Railway config**: `railway.toml` at repo root
+- **Database**: Supabase (PostGIS free tier) — run `schema/schema.sql` after provisioning
+- **Cache**: Upstash Redis (free tier)
+- **Required env vars**: `DATABASE_URL`, `REDIS_URL`, `APP_ENV=production`, `PORT=8888`
 
 ---
 

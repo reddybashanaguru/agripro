@@ -1,7 +1,10 @@
 # Finagra Unity — User Guide
 
 > Master manual for investors, engineers, and field operators.
-> Platform: ₹500Cr-scale AgTech payments | 202+ tests | 11 production-grade modules
+> Platform: ₹500Cr-scale AgTech payments | 202+ tests | 12 production-grade modules
+>
+> **Live Demo** (no backend needed): https://finagra-unity.vercel.app
+> **Mobile Demo**: https://finagra-unity.vercel.app/mobile-demo
 
 ---
 
@@ -343,7 +346,7 @@ Open your browser at `http://localhost:3000/activity`.
 - The card shows: gross amount ₹1,00,000 | farmer gets ₹50,000 | truncated txn ID
 - The status pill shows **"connected"** with an animated dot
 
-The Dashboard at `http://localhost:3000` now reflects updated transaction counts and ledger balance (ISR revalidation every 30 seconds, or hard-refresh to force it).
+The Dashboard at `http://localhost:3000` now reflects updated transaction counts and ledger balance (rendered server-side on each request — hard-refresh to get the latest).
 
 Check ledger balance:
 
@@ -442,11 +445,15 @@ Repository interfaces are fine-grained per domain. `SatelliteUsecase` holds a `S
 
 The web app solves the **investor visibility problem** in AgTech: traditionally, an investor deploying capital to agricultural credit has zero real-time insight into where money is, what crops look like, or whether field activity is genuine. The Investor Command Center provides:
 
-- Live dashboard with key metrics (ISR-refreshed)
+- Live dashboard with key metrics
 - Global ledger balance with integrity flag
 - Transaction history with split visibility
 - Satellite NDVI monitoring with health gauge
 - Real-time event feed via Server-Sent Events
+
+### Demo Mode (Production Feature)
+
+When `NEXT_PUBLIC_API_URL` is not set, all pages automatically serve mock data — 142 farmers, 89 plots, ₹18.5L disbursed, 3 NDVI alerts, live synthetic event stream. This lets investors explore the full platform at https://finagra-unity.vercel.app without a running backend. Set `NEXT_PUBLIC_API_URL` to a live backend URL to switch to real data.
 
 ### Key Commands
 

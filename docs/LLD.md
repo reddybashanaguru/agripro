@@ -1,6 +1,6 @@
 # Finagra Unity — Low-Level Design
 
-> Version: Step 11 complete | Last updated: 2026-05-12
+> Version: Step 12 complete | Last updated: 2026-05-14
 
 ---
 
